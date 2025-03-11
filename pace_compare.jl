@@ -6,7 +6,7 @@ using LinearAlgebra
 
 using Printf
 
-using MathUtils
+using LorenzoRotations
 
 struct Problem
     N ::Int64       # num keypoints
@@ -49,7 +49,7 @@ function genproblem(;N::Int64=10, K::Int64=4, σm::Float64=0.05, r::Float64=0.2)
     p = randn(3,1) .+ 1.0
 
     # gt rotation
-    R = unifrandrotation()
+    R = randrotation()
     # save
     gt = Solution(c, p, R)
 

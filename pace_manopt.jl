@@ -3,13 +3,13 @@
 using Random
 using Statistics
 using LinearAlgebra
-using JuMP, Ipopt
+using JuMP
 
 using TSSOS
 using DynamicPolynomials
 using Printf
 
-using MathUtils
+using LorenzoRotations
 
 struct Problem
     N ::Int64       # num keypoints

@@ -6,7 +6,7 @@ using LinearAlgebra
 
 using Printf
 
-using MathUtils
+using LorenzoRotations
 
 struct Problem
     N ::Int64       # num keypoints
