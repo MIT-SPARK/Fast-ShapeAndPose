@@ -273,7 +273,7 @@ function solvePACE_scf(prob, y, weights, lam=0.)
     Lagrangian derivative without `μ(1-q'*q)`
     """
     function ℒ(q) # \scrL
-        # constant terms
+        # linear in q
         L1  = -2*sum([Ω1(yc[:,i])'*Ω2(Bc[i]*c2) for i = 1:N])
         L1 += -2*sum([Ω1(yc[:,i])'*Ω2(Bc[i]*c2) for i = 1:N])'
         L2  =  2*sum([Ω1(yc[:,j])'*Ω2(Bc[j]*c1'*sum([Bc[i]'*Bc[i] for i = 1:N])*c2) for j = 1:N])
@@ -296,39 +296,9 @@ function solvePACE_scf(prob, y, weights, lam=0.)
         L6 += sum(Ω1(yc[:,k])'*Ω2(Bc[k]*c1'*sum([Bc[i]'*Bc[i] for i = 1:N])'*c1*sum([Bc[j]'*R'*yc[:,j] for j = 1:N])) for k = 1:N)'
         return L1 + L2 + L3 + L4 + L5 + L6
     end
-
-    ## Optimal solution:
-    q_scf = zeros(4)
-    λ = 100.
-    # repeat just to make sure
-    for _ = 1:5
-        # look for the eigenvector q corresponding to the MINIMUM eigenvalue of ℒ(q)
-        q_guess = normalize(randn(4))
-        for i = 1:Int(1e4)
-            mat = ℒ(q_guess)
-            q_new = eigvecs(mat)[:,1]; normalize!(q_new); # SCF
-            # q_new = normalize(mat*q_guess) # Power iteration
-            if abs(abs(q_guess'*q_new) - 1) < 1e-8
-                q_guess = q_new
-                break
-            end
-            q_guess = q_new
-        end
-        λ_mat = eigvals(ℒ(q_guess))[1]
-        if λ_mat < λ
-            λ = λ_mat
-            q_scf = q_guess
-        end
-    end
-
-    # Convert to solution
-    R_est = quat2rotm(q_scf)
-    c_est = reshape(c1*sum([Bc[i]'*R_est'*yc[:,i] for i = 1:prob.N]) + c2,prob.K,1)
-    p_est = ybar - R_est*Bbar*c_est
-
-    soln = Solution(c_est, p_est, R_est)
-
-    # full objective value
+    """
+    Full objective value.
+    """
     function ℒ2(q) # \scrL
         L = sum([yc[:,i]'*yc[:,i] for i = 1:N])
         L += sum([c2'*Bc[i]'*Bc[i]*c2 for i = 1:N])
@@ -356,6 +326,38 @@ function solvePACE_scf(prob, y, weights, lam=0.)
         L6 += sum(Ω1(yc[:,k])'*Ω2(Bc[k]*c1'*sum([Bc[i]'*Bc[i] for i = 1:N])'*c1*sum([Bc[j]'*R'*yc[:,j] for j = 1:N])) for k = 1:N)'
         return q'*(1/2*(L1 + L2 + L3) + 1/4*(L4 + L5 + L6))*q + L
     end
+
+    ## Optimal solution:
+    q_scf = zeros(4)
+    obj = 100.
+    # repeat just to make sure
+    for i = 1:4
+        # look for the eigenvector q corresponding to the MINIMUM eigenvalue of ℒ(q)
+        q_guess = normalize(randn(4))
+        for _ = 1:Int(1e3)
+            mat = ℒ(q_guess)
+            q_new = eigvecs(mat)[:,1]; normalize!(q_new); # SCF
+            # q_new = normalize(mat*q_guess) # Power iteration
+            if abs(abs(q_guess'*q_new) - 1) < 1e-8
+                q_guess = q_new
+                break
+            end
+            q_guess = q_new
+        end
+        obj_mat = ℒ2(q_guess)
+        if obj_mat < obj
+            obj = obj_mat
+            q_scf = q_guess
+        end
+    end
+
+    # Convert to solution
+    R_est = quat2rotm(q_scf)
+    c_est = reshape(c1*sum([Bc[i]'*R_est'*yc[:,i] for i = 1:prob.N]) + c2,prob.K,1)
+    p_est = ybar - R_est*Bbar*c_est
+
+    soln = Solution(c_est, p_est, R_est)
+
     obj = ℒ2(q_scf)
 
     return soln, ℒ, obj
