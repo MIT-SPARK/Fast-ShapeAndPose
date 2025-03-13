@@ -361,7 +361,7 @@ function solvePACE_scf(prob, y, weights, lam=0.; grid=false)
     qs = [q_scf]
     if grid
         # search for other maximum eigenvectors!
-        for i = 1:1000
+        for i = 1:2000
             q_guess = normalize(randn(4))
             for i = 1:100
                 mat = ℒ(q_guess)
@@ -370,7 +370,7 @@ function solvePACE_scf(prob, y, weights, lam=0.; grid=false)
                 # stop if too close to q_scf
                 extrabreak = false
                 for quat in qs
-                    if abs(abs(q_new'*quat) - 1) < 1e-6
+                    if abs(abs(q_new'*quat) - 1) < 1e-5
                         extrabreak = true
                         break
                     end
@@ -396,7 +396,7 @@ end
 ### Simulate!
 σm = 1.0
 
-repeats = 1000
+repeats = 10000
 gaps = zeros(repeats)
 R_errs = zeros(repeats,3)
 p_errs = zeros(repeats,3)

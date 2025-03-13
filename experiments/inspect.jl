@@ -22,14 +22,14 @@ dif = R_errs[:,3] .- R_errs[:,1]
 # criteria = dif .!= 10
 criteria = gaps .> 1e-5
 
-idx = 1
+# idx = 1574 # 1033
 for idx = 1:sum(criteria)
 
     # main data
     gap = gaps[criteria][idx]
     R_err = R_errs[criteria,:][idx,:]
     obj = objs[criteria,:][idx,:]
-    ℒ, q_ts, q_mn, q_scf, prob, gt, y, qu = datas[criteria[1:795]][idx]
+    ℒ, q_ts, q_mn, q_scf, prob, gt, y, qu = datas[criteria][idx]
     q_gt = rotm2quat(gt.R)
 
     # matrices
@@ -109,13 +109,13 @@ for idx = 1:sum(criteria)
     if abs(abs(q_local'*q_scf) - 1) < 1e-5
         # printstyled(@sprintf "(%d) Local solution matches q_scf\n" idx; color=:green)
     else
-        printstyled(@sprintf "(%d) Local solution different from q_scf\n" idx; color=:red)
+        # printstyled(@sprintf "(%d) Local solution different from q_scf\n" idx; color=:red)
     end
     # 4. Hierarchy of objective values
     if (obj[1] - obj[3] < 0.1) && (obj[3] - ℒ2(q_local) < 0.1) && (ℒ2(q_local) - ℒ2(q_ts) < 0.1)
         # printstyled(@sprintf "(%d) %.2f < %.2f < %.2f < %.2f\n" idx obj[1] obj[3] ℒ2(q_local) ℒ2(q_ts); color=:green)
     else
-        printstyled(@sprintf "(%d) %.2f < %.2f < %.2f < %.2f\n" idx obj[1] obj[3] ℒ2(q_local) ℒ2(q_ts); color=:red)
+        # printstyled(@sprintf "(%d) %.2f < %.2f < %.2f < %.2f\n" idx obj[1] obj[3] ℒ2(q_local) ℒ2(q_ts); color=:red)
     end
     # 5. length of qu
     if length(qu) > 3
@@ -133,12 +133,12 @@ for idx = 1:sum(criteria)
         printstyled(@sprintf "(%d) %d options; min distance: %.2f\n" idx length(qu) minimum(dists); color=:blue)
     end
     # obj
-    if length(qu) > 1
-        objs_qu = [ℒ2(quat) for quat in qu]
-        if argmin(objs_qu) != 1
-            printstyled(@sprintf "(%d) Max eigenvector not minimum." idx; color=:red)
-        end
-    end
+    # if length(qu) > 1
+    #     objs_qu = [ℒ2(quat) for quat in qu]
+    #     if argmin(objs_qu) != 1
+    #         printstyled(@sprintf "(%d) Max eigenvector not minimum.\n" idx; color=:red)
+    #     end
+    # end
 end
 
 # # find second eigenvector
