@@ -251,7 +251,7 @@ function Ω2(q)
 end
 
 # weights not currently working
-function solvePACE_scf(prob, y, weights, lam=0.)
+function solvePACE_scf(prob, y, weights, lam=0.; grid=false)
     K = prob.K
     N = prob.N
     # still need to add in weights
@@ -275,26 +275,23 @@ function solvePACE_scf(prob, y, weights, lam=0.)
     function ℒ(q) # \scrL
         # linear in q
         L1  = -2*sum([Ω1(yc[:,i])'*Ω2(Bc[i]*c2) for i = 1:N])
-        L1 += -2*sum([Ω1(yc[:,i])'*Ω2(Bc[i]*c2) for i = 1:N])'
+        L1 += L1'
         L2  =  2*sum([Ω1(yc[:,j])'*Ω2(Bc[j]*c1'*sum([Bc[i]'*Bc[i] for i = 1:N])*c2) for j = 1:N])
-        L2 +=  2*sum([Ω1(yc[:,j])'*Ω2(Bc[j]*c1'*sum([Bc[i]'*Bc[i] for i = 1:N])*c2) for j = 1:N])'
+        L2 +=  L2'
         L3  =  2*lam*sum([Ω1(yc[:,j])'*Ω2(Bc[j]*c1'*c2) for j = 1:N])
-        L3 +=  2*lam*sum([Ω1(yc[:,j])'*Ω2(Bc[j]*c1'*c2) for j = 1:N])'
+        L3 +=  L3'
         # quadratic in q
         R = quat2rotm(q)
-        L4  = lam*sum([Ω1(yc[:,i])'*Ω2(Bc[i]*c1'*c1*sum([Bc[j]'*R'*yc[:,j] for j = 1:N])) for i = 1:N])
-        L4 += lam*sum([Ω1(yc[:,i])'*Ω2(Bc[i]*c1'*c1*sum([Bc[j]'*R'*yc[:,j] for j = 1:N])) for i = 1:N])'
-        L4 += lam*sum([Ω1(yc[:,i])'*Ω2(Bc[i]*c1'*c1*sum([Bc[j]'*R'*yc[:,j] for j = 1:N])) for i = 1:N])
-        L4 += lam*sum([Ω1(yc[:,i])'*Ω2(Bc[i]*c1'*c1*sum([Bc[j]'*R'*yc[:,j] for j = 1:N])) for i = 1:N])'
+        L4  = 2*lam*sum([Ω1(yc[:,i])'*Ω2(Bc[i]*c1'*c1*sum([Bc[j]'*R'*yc[:,j] for j = 1:N])) for i = 1:N])
+        L4 += L4'
         L5  = -2*sum([Ω1(yc[:,i])'*Ω2(Bc[i]*c1*sum([Bc[j]'*R'*yc[:,j] for j = 1:N])) for i = 1:N])
-        L5 += -2*sum([Ω1(yc[:,i])'*Ω2(Bc[i]*c1*sum([Bc[j]'*R'*yc[:,j] for j = 1:N])) for i = 1:N])'
         L5 += -2*sum([Ω1(yc[:,j])'*Ω2(Bc[j]*c1'*sum([Bc[i]'*R'*yc[:,i] for i = 1:N])) for j = 1:N])
-        L5 += -2*sum([Ω1(yc[:,j])'*Ω2(Bc[j]*c1'*sum([Bc[i]'*R'*yc[:,i] for i = 1:N])) for j = 1:N])'
-        L6  = sum(Ω1(yc[:,k])'*Ω2(Bc[k]*c1'*sum([Bc[i]'*Bc[i] for i = 1:N])'*c1*sum([Bc[j]'*R'*yc[:,j] for j = 1:N])) for k = 1:N)
-        L6 += sum(Ω1(yc[:,k])'*Ω2(Bc[k]*c1'*sum([Bc[i]'*Bc[i] for i = 1:N])'*c1*sum([Bc[j]'*R'*yc[:,j] for j = 1:N])) for k = 1:N)'
-        L6 += sum(Ω1(yc[:,k])'*Ω2(Bc[k]*c1'*sum([Bc[i]'*Bc[i] for i = 1:N])'*c1*sum([Bc[j]'*R'*yc[:,j] for j = 1:N])) for k = 1:N)
-        L6 += sum(Ω1(yc[:,k])'*Ω2(Bc[k]*c1'*sum([Bc[i]'*Bc[i] for i = 1:N])'*c1*sum([Bc[j]'*R'*yc[:,j] for j = 1:N])) for k = 1:N)'
-        return L1 + L2 + L3 + L4 + L5 + L6
+        L5 += L5'
+        L6  = 2*sum(Ω1(yc[:,k])'*Ω2(Bc[k]*c1'*sum([Bc[i]'*Bc[i] for i = 1:N])'*c1*sum([Bc[j]'*R'*yc[:,j] for j = 1:N])) for k = 1:N)
+        L6 += L6'
+        return L1 + L2 + L3 + (L4 + L5 + L6)
+        # works better in high noise:
+        # return L1 + L2 + L3 + 1/2*(L4 + L5 + L6)
     end
     """
     Full objective value.
@@ -331,7 +328,7 @@ function solvePACE_scf(prob, y, weights, lam=0.)
     q_scf = zeros(4)
     obj = 100.
     # repeat just to make sure
-    for i = 1:4
+    for i = 1:(if grid 1 else 10 end)
         # look for the eigenvector q corresponding to the MINIMUM eigenvalue of ℒ(q)
         q_guess = normalize(randn(4))
         for _ = 1:Int(1e3)
@@ -360,7 +357,40 @@ function solvePACE_scf(prob, y, weights, lam=0.)
 
     obj = ℒ2(q_scf)
 
-    return soln, ℒ, obj
+    # for grid
+    qs = [q_scf]
+    if grid
+        # search for other maximum eigenvectors!
+        for i = 1:1000
+            q_guess = normalize(randn(4))
+            for i = 1:100
+                mat = ℒ(q_guess)
+                q_new = eigvecs(mat)[:,1]
+
+                # stop if too close to q_scf
+                extrabreak = false
+                for quat in qs
+                    if abs(abs(q_new'*quat) - 1) < 1e-6
+                        extrabreak = true
+                        break
+                    end
+                end
+                if extrabreak
+                    break
+                end
+
+                # stop if constant
+                if abs(abs(q_guess'*q_new) - 1) < 1e-8
+                    push!(qs, q_guess)
+                    break
+                end
+
+                q_guess = q_new
+            end
+        end
+    end
+    
+    return soln, ℒ, obj, qs
 end
 
 ### Simulate!
@@ -369,6 +399,8 @@ end
 repeats = 1000
 gaps = zeros(repeats)
 R_errs = zeros(repeats,3)
+p_errs = zeros(repeats,3)
+c_errs = zeros(repeats,3)
 objs = zeros(repeats,3)
 
 datas = []
@@ -382,12 +414,19 @@ for i = 1:repeats
     # Solve
     soln_tssos, gap_tssos, obj_tssos = solvePACE_TSSOS(prob, y, weights, lam)
     soln_manopt, obj_manopt = solvePACE_Manopt(prob, y, weights, lam)
-    soln_scf, ℒ, obj_scf = solvePACE_scf(prob, y, weights, lam)
+    soln_scf, ℒ, obj_scf, qs = solvePACE_scf(prob, y, weights, lam; grid=(gap_tssos > 1e-5))
 
     # Compute Errors
     _, R_err_tssos = rotm2axang(gt.R'*soln_tssos.R); R_err_tssos *= 180/π
     _, R_err_manopt = rotm2axang(gt.R'*soln_manopt.R); R_err_manopt *= 180/π
     _, R_err_scf = rotm2axang(gt.R'*soln_scf.R); R_err_scf *= 180/π
+
+    p_errs[i,1] = norm(soln_tssos.p - gt.p)
+    p_errs[i,2] = norm(soln_manopt.p - gt.p)
+    p_errs[i,3] = norm(soln_scf.p - gt.p)
+    c_errs[i,1] = norm(soln_tssos.c - gt.c)
+    c_errs[i,2] = norm(soln_manopt.c - gt.c)
+    c_errs[i,3] = norm(soln_scf.c - gt.c)
 
     # if R_err_scf - R_err_tssos > 10
     #     global data = (R_err_scf, R_err_tssos, ℒ, rotm2quat(soln_tssos.R), rotm2quat(soln_scf.R), prob, gt, y)
@@ -402,7 +441,7 @@ for i = 1:repeats
     objs[i,1] = obj_tssos
     objs[i,2] = obj_manopt
     objs[i,3] = obj_scf
-    push!(datas, (ℒ, rotm2quat(soln_tssos.R), rotm2quat(soln_manopt.R), rotm2quat(soln_scf.R), prob, gt, y))
+    push!(datas, (ℒ, rotm2quat(soln_tssos.R), rotm2quat(soln_manopt.R), rotm2quat(soln_scf.R), prob, gt, y, qs))
     if i % 10 == 0
         print("$i ")
     end
@@ -411,7 +450,13 @@ end
 ### Plot!
 import Plots
 
-Plots.scatter(abs.(gaps), R_errs[:,2:3] .- R_errs[:,1], label=["Local" "SCF"], title="Difference from SDP")
+p1 = Plots.scatter(abs.(gaps), p_errs[:,2:3] .- p_errs[:,1], label=["Local" "SCF"], title="Difference from SDP")
+Plots.plot!(xscale=:log10, legend=:bottom, xlabel="Suboptimality Gap", ylabel="Pos Error (m)")
+
+p2 = Plots.scatter(abs.(gaps), c_errs[:,2:3] .- c_errs[:,1], label=["Local" "SCF"], title="Difference from SDP")
+Plots.plot!(xscale=:log10, legend=:bottom, xlabel="Suboptimality Gap", ylabel="Shape Error")
+
+p3 = Plots.scatter(abs.(gaps), R_errs[:,2:3] .- R_errs[:,1], label=["Local" "SCF"], title="Difference from SDP")
 Plots.plot!(xscale=:log10, legend=:bottom, xlabel="Suboptimality Gap", ylabel="Rot Error (deg)")
 
 ### debugging

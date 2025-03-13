@@ -1,9 +1,8 @@
 # inspect results of simulation
 function scf(ℒ, eigval=1; q0=nothing)
+    q_scf = q0
     if isnothing(q0)
         q_scf = normalize(randn(4))
-    else
-        q_scf = q0
     end
     for i = 1:Int(1e6)
         mat = ℒ(q_scf)
@@ -19,16 +18,18 @@ function scf(ℒ, eigval=1; q0=nothing)
 end
 
 # set criteria
-criteria = dif .>= 10
+dif = R_errs[:,3] .- R_errs[:,1]
+# criteria = dif .!= 10
+criteria = gaps .> 1e-5
 
-idx = 16
-# for idx = 1:sum(criteria)
+idx = 1
+for idx = 1:sum(criteria)
 
     # main data
     gap = gaps[criteria][idx]
     R_err = R_errs[criteria,:][idx,:]
     obj = objs[criteria,:][idx,:]
-    ℒ, q_ts, q_mn, q_scf, prob, gt, y = datas[criteria][idx]
+    ℒ, q_ts, q_mn, q_scf, prob, gt, y, qu = datas[criteria[1:795]][idx]
     q_gt = rotm2quat(gt.R)
 
     # matrices
@@ -83,31 +84,62 @@ idx = 16
         return q'*(1/2*(L1 + L2 + L3) + 1/4*(L4 + L5 + L6))*q + L
     end
 
+    ## qu stuff
+    # if length(qu) > 1
+    #     printstyled("($idx) $(length(qu))\n")
+    # end
 
     ## Observations
     # 1. Which eigenvector?
     vecs_scf = eigvecs(mat_scf)
     if abs(abs(q_scf'*vecs_scf[:,1]) - 1) < 1e-8
-        printstyled(@sprintf "(%d) SCF used v1\n" idx; color=:green)
+        # printstyled(@sprintf "(%d) SCF used v1\n" idx; color=:green)
     else
         printstyled(@sprintf "(%d) SCF used v2\n" idx; color=:red)
     end
     # 2. First order conditions met by q_ts?
     vecs_ts = eigvecs(mat_ts)
     if abs(abs(q_ts'*vecs_ts[:,1]) - 1) < 1e-8
-        printstyled(@sprintf "(%d) SDP meets first order conditions\n" idx; color=:green)
+        # printstyled(@sprintf "(%d) SDP meets first order conditions\n" idx; color=:green)
     else
-        printstyled(@sprintf "(%d) SDP violates first order conditions\n" idx; color=:red)
+        # printstyled(@sprintf "(%d) SDP violates first order conditions\n" idx; color=:blue)
     end
     # 3. Local solution of q_ts does not match q_scf
     q_local = scf(ℒ, q0=q_ts)
     if abs(abs(q_local'*q_scf) - 1) < 1e-5
-        printstyled(@sprintf "(%d) Local solution matches q_scf\n" idx; color=:green)
+        # printstyled(@sprintf "(%d) Local solution matches q_scf\n" idx; color=:green)
     else
         printstyled(@sprintf "(%d) Local solution different from q_scf\n" idx; color=:red)
     end
-
-# end
+    # 4. Hierarchy of objective values
+    if (obj[1] - obj[3] < 0.1) && (obj[3] - ℒ2(q_local) < 0.1) && (ℒ2(q_local) - ℒ2(q_ts) < 0.1)
+        # printstyled(@sprintf "(%d) %.2f < %.2f < %.2f < %.2f\n" idx obj[1] obj[3] ℒ2(q_local) ℒ2(q_ts); color=:green)
+    else
+        printstyled(@sprintf "(%d) %.2f < %.2f < %.2f < %.2f\n" idx obj[1] obj[3] ℒ2(q_local) ℒ2(q_ts); color=:red)
+    end
+    # 5. length of qu
+    if length(qu) > 3
+        printstyled("($idx) Found more than 3 possibilities!\n", color=:red)
+    end
+    # 6. distance of qu
+    if length(qu) > 1
+        dists = []
+        for i = 2:size(qu)[1]
+            append!(dists, min(norm(qu[1] - qu[i]), norm(qu[1] - -qu[i])))
+            for j = 3:size(qu)[1]
+                append!(dists, min(norm(qu[2] - qu[j]), norm(qu[2] - -qu[j])))
+            end
+        end
+        printstyled(@sprintf "(%d) %d options; min distance: %.2f\n" idx length(qu) minimum(dists); color=:blue)
+    end
+    # obj
+    if length(qu) > 1
+        objs_qu = [ℒ2(quat) for quat in qu]
+        if argmin(objs_qu) != 1
+            printstyled(@sprintf "(%d) Max eigenvector not minimum." idx; color=:red)
+        end
+    end
+end
 
 # # find second eigenvector
 # q_ans = zeros(4)
