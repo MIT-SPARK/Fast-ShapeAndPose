@@ -285,9 +285,9 @@ function solvePACE_scf(prob, y, weights, lam=0.; grid=false)
         L3 = zeros(4,4)
         for i = 1:N
             L1 += -2*Ω1(yc[:,i])'*Ω2(Bc[i]*c2)
-            L2 +=  2*Ω1(yc[:,i])'*Ω2(Bc[i]*c1'*Bc2*c2) # this term might always be 0s (c1'*Bc2*c2 = 0)
             if lam > 0.
                 L3 +=  2*lam*Ω1(yc[:,i])'*Ω2(Bc[i]*c1'*c2)
+                L2 +=  2*Ω1(yc[:,i])'*Ω2(Bc[i]*c1'*Bc2*c2) # (c1'*Bc2*c2 = 0 if lam=0)
             end
         end
         L1 += L1'
@@ -423,58 +423,63 @@ function solvePACE_scf(prob, y, weights, lam=0.; grid=false)
 end
 
 ### Simulate!
-σm = 0.1
+function simulate(; σm = 0.1, repeats = 1)
 
-repeats = 1
-gaps = zeros(repeats)
-R_errs = zeros(repeats,3)
-p_errs = zeros(repeats,3)
-c_errs = zeros(repeats,3)
-objs = zeros(repeats,3)
+    gaps = zeros(repeats)
+    R_errs = zeros(repeats,3)
+    p_errs = zeros(repeats,3)
+    c_errs = zeros(repeats,3)
+    objs = zeros(repeats,3)
 
-datas = []
+    datas = []
 
-for i = 1:repeats
-    # Define problem
-    prob, gt, y = genproblem(σm=σm)
-    lam = 0.0
-    weights = ones(prob.N)
+    for i = 1:repeats
+        # Define problem
+        prob, gt, y = genproblem(σm=σm)
+        lam = 0.0
+        weights = ones(prob.N)
 
-    # Solve
-    soln_tssos, gap_tssos, obj_tssos = solvePACE_TSSOS(prob, y, weights, lam)
-    soln_manopt, obj_manopt = solvePACE_Manopt(prob, y, weights, lam)
-    soln_scf, ℒ, obj_scf, qs = solvePACE_scf(prob, y, weights, lam; grid=(gap_tssos > 1e-5))
+        # Solve
+        soln_tssos, gap_tssos, obj_tssos = solvePACE_TSSOS(prob, y, weights, lam)
+        soln_manopt, obj_manopt = solvePACE_Manopt(prob, y, weights, lam)
+        soln_scf, ℒ, obj_scf, qs = solvePACE_scf(prob, y, weights, lam; grid=false) #(gap_tssos > 1e-5))
 
-    # Compute Errors
-    _, R_err_tssos = rotm2axang(gt.R'*soln_tssos.R); R_err_tssos *= 180/π
-    _, R_err_manopt = rotm2axang(gt.R'*soln_manopt.R); R_err_manopt *= 180/π
-    _, R_err_scf = rotm2axang(gt.R'*soln_scf.R); R_err_scf *= 180/π
+        # Compute Errors
+        _, R_err_tssos = rotm2axang(gt.R'*soln_tssos.R); R_err_tssos *= 180/π
+        _, R_err_manopt = rotm2axang(gt.R'*soln_manopt.R); R_err_manopt *= 180/π
+        _, R_err_scf = rotm2axang(gt.R'*soln_scf.R); R_err_scf *= 180/π
 
-    p_errs[i,1] = norm(soln_tssos.p - gt.p)
-    p_errs[i,2] = norm(soln_manopt.p - gt.p)
-    p_errs[i,3] = norm(soln_scf.p - gt.p)
-    c_errs[i,1] = norm(soln_tssos.c - gt.c)
-    c_errs[i,2] = norm(soln_manopt.c - gt.c)
-    c_errs[i,3] = norm(soln_scf.c - gt.c)
+        p_errs[i,1] = norm(soln_tssos.p - gt.p)
+        p_errs[i,2] = norm(soln_manopt.p - gt.p)
+        p_errs[i,3] = norm(soln_scf.p - gt.p)
+        c_errs[i,1] = norm(soln_tssos.c - gt.c)
+        c_errs[i,2] = norm(soln_manopt.c - gt.c)
+        c_errs[i,3] = norm(soln_scf.c - gt.c)
 
-    # if R_err_scf - R_err_tssos > 10
-    #     global data = (R_err_scf, R_err_tssos, ℒ, rotm2quat(soln_tssos.R), rotm2quat(soln_scf.R), prob, gt, y)
-    #     break
-    # end
+        # if R_err_scf - R_err_tssos > 10
+        #     global data = (R_err_scf, R_err_tssos, ℒ, rotm2quat(soln_tssos.R), rotm2quat(soln_scf.R), prob, gt, y)
+        #     break
+        # end
 
-    # Save
-    gaps[i] = gap_tssos
-    R_errs[i,1] = R_err_tssos
-    R_errs[i,2] = R_err_manopt
-    R_errs[i,3] = R_err_scf
-    objs[i,1] = obj_tssos
-    objs[i,2] = obj_manopt
-    objs[i,3] = obj_scf
-    push!(datas, (ℒ, rotm2quat(soln_tssos.R), rotm2quat(soln_manopt.R), rotm2quat(soln_scf.R), prob, gt, y, qs))
-    if i % 10 == 0
-        print("$i ")
+        # Save
+        gaps[i] = gap_tssos
+        R_errs[i,1] = R_err_tssos
+        R_errs[i,2] = R_err_manopt
+        R_errs[i,3] = R_err_scf
+        objs[i,1] = obj_tssos
+        objs[i,2] = obj_manopt
+        objs[i,3] = obj_scf
+        push!(datas, (ℒ, rotm2quat(soln_tssos.R), rotm2quat(soln_manopt.R), rotm2quat(soln_scf.R), prob, gt, y, qs))
+        if i % 10 == 0
+            print("$i ")
+        end
     end
+
+    return gaps, R_errs, p_errs, c_errs, objs, datas
 end
+
+# simulate
+gaps, R_errs, p_errs, c_errs, objs, datas = simulate(σm = 1.0, repeats = 1000)
 
 ### Plot!
 import Plots
