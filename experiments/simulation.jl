@@ -325,9 +325,9 @@ function solvePACE_scf(prob, y, weights, lam=0.; grid=false)
         L3 = zeros(4,4)
         for i = 1:N
             L1 += -2*Ω1(yc[:,i])'*Ω2(Bc[i]*c2)
-            L2 +=  2*Ω1(yc[:,i])'*Ω2(Bc[i]*c1'*Bc2*c2) # this term might always be 0s (c1'*Bc2*c2 = 0)
             if lam > 0.
                 L3 +=  2*lam*Ω1(yc[:,i])'*Ω2(Bc[i]*c1'*c2)
+                L2 +=  2*Ω1(yc[:,i])'*Ω2(Bc[i]*c1'*Bc2*c2) # (c1'*Bc2*c2 = 0 if lam=0)
             end
         end
         L1 += L1'
