@@ -24,3 +24,6 @@ docs/site/
 Manifest.toml
 
 .vscode
+
+# data files from Serialization.jl
+*.dat

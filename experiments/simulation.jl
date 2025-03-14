@@ -263,7 +263,8 @@ function solvePACE_scf(prob, y, weights, lam=0.; grid=false)
     ## eliminate shape
     Bc = eachslice(prob.B,dims=2) .- [Bbar]
     yc = reduce(hcat, eachcol(y) .- [ybar])
-    A = 2*(sum([Bc[i]'*Bc[i] for i = 1:N]) + lam*I)
+    Bc2 = sum([Bc[i]'*Bc[i] for i = 1:N])
+    A = 2*(Bc2 + lam*I)
     invA = inv(A)
     # Schur complement
     c1 = 2*(invA - invA*ones(K)*inv(ones(K)'*invA*ones(K))*ones(K)'*invA)
@@ -273,54 +274,82 @@ function solvePACE_scf(prob, y, weights, lam=0.; grid=false)
     Lagrangian derivative without `μ(1-q'*q)`
     """
     function ℒ(q) # \scrL
+        # optimize ideas:
+        # - convert arrays to for loops
+        # - try @view
+        # - exploit symmetry (declare arrays as symmetric, update symmetrically)
+        
         # linear in q
-        L1  = -2*sum([Ω1(yc[:,i])'*Ω2(Bc[i]*c2) for i = 1:N])
+        L1 = zeros(4,4)
+        L2 = zeros(4,4)
+        L3 = zeros(4,4)
+        for i = 1:N
+            L1 += -2*Ω1(yc[:,i])'*Ω2(Bc[i]*c2)
+            L2 +=  2*Ω1(yc[:,i])'*Ω2(Bc[i]*c1'*Bc2*c2) # this term might always be 0s (c1'*Bc2*c2 = 0)
+            if lam > 0.
+                L3 +=  2*lam*Ω1(yc[:,i])'*Ω2(Bc[i]*c1'*c2)
+            end
+        end
         L1 += L1'
-        L2  =  2*sum([Ω1(yc[:,j])'*Ω2(Bc[j]*c1'*sum([Bc[i]'*Bc[i] for i = 1:N])*c2) for j = 1:N])
-        L2 +=  L2'
-        L3  =  2*lam*sum([Ω1(yc[:,j])'*Ω2(Bc[j]*c1'*c2) for j = 1:N])
-        L3 +=  L3'
+        L2 += L2'
+        L3 += L3'
         # quadratic in q
+        L4 = zeros(4,4)
+        L5 = zeros(4,4)
+        L6 = zeros(4,4)
         R = quat2rotm(q)
-        L4  = 2*lam*sum([Ω1(yc[:,i])'*Ω2(Bc[i]*c1'*c1*sum([Bc[j]'*R'*yc[:,j] for j = 1:N])) for i = 1:N])
+        Bry = sum([Bc[j]'*R'*yc[:,j] for j = 1:N])
+        for i = 1:N
+            if lam > 0.
+                L4 += 2*lam*Ω1(yc[:,i])'*Ω2(Bc[i]*c1'*c1*Bry)
+            end
+            L5 += -2*Ω1(yc[:,i])'*Ω2(Bc[i]*(c1+c1')*Bry)
+            L6 += 2*Ω1(yc[:,i])'*Ω2(Bc[i]*c1'*Bc2'*c1*Bry)
+        end
         L4 += L4'
-        L5  = -2*sum([Ω1(yc[:,i])'*Ω2(Bc[i]*c1*sum([Bc[j]'*R'*yc[:,j] for j = 1:N])) for i = 1:N])
-        L5 += -2*sum([Ω1(yc[:,j])'*Ω2(Bc[j]*c1'*sum([Bc[i]'*R'*yc[:,i] for i = 1:N])) for j = 1:N])
         L5 += L5'
-        L6  = 2*sum(Ω1(yc[:,k])'*Ω2(Bc[k]*c1'*sum([Bc[i]'*Bc[i] for i = 1:N])'*c1*sum([Bc[j]'*R'*yc[:,j] for j = 1:N])) for k = 1:N)
         L6 += L6'
         return L1 + L2 + L3 + (L4 + L5 + L6)
-        # works better in high noise:
-        # return L1 + L2 + L3 + 1/2*(L4 + L5 + L6)
     end
     """
     Full objective value.
     """
     function ℒ2(q) # \scrL
         L = sum([yc[:,i]'*yc[:,i] for i = 1:N])
-        L += sum([c2'*Bc[i]'*Bc[i]*c2 for i = 1:N])
+        L += c2'*Bc2*c2
         L += lam*(c2'*c2)
-        # constant terms
-        L1  = -2*sum([Ω1(yc[:,i])'*Ω2(Bc[i]*c2) for i = 1:N])
-        L1 += -2*sum([Ω1(yc[:,i])'*Ω2(Bc[i]*c2) for i = 1:N])'
-        L2  =  2*sum([Ω1(yc[:,j])'*Ω2(Bc[j]*c1'*sum([Bc[i]'*Bc[i] for i = 1:N])*c2) for j = 1:N])
-        L2 +=  2*sum([Ω1(yc[:,j])'*Ω2(Bc[j]*c1'*sum([Bc[i]'*Bc[i] for i = 1:N])*c2) for j = 1:N])'
-        L3  =  2*lam*sum([Ω1(yc[:,j])'*Ω2(Bc[j]*c1'*c2) for j = 1:N])
-        L3 +=  2*lam*sum([Ω1(yc[:,j])'*Ω2(Bc[j]*c1'*c2) for j = 1:N])'
+
+        # linear in q
+        L1 = zeros(4,4)
+        L2 = zeros(4,4)
+        L3 = zeros(4,4)
+        for i = 1:N
+            L1 += -2*Ω1(yc[:,i])'*Ω2(Bc[i]*c2)
+            L2 +=  2*Ω1(yc[:,i])'*Ω2(Bc[i]*c1'*Bc2*c2) # this term might always be 0s (c1'*Bc2*c2 = 0)
+            if lam > 0.
+                L3 +=  2*lam*Ω1(yc[:,i])'*Ω2(Bc[i]*c1'*c2)
+            end
+        end
+        L1 += L1'
+        L2 += L2'
+        L3 += L3'
+
         # quadratic in q
+        L4 = zeros(4,4)
+        L5 = zeros(4,4)
+        L6 = zeros(4,4)
         R = quat2rotm(q)
-        L4  = lam*sum([Ω1(yc[:,i])'*Ω2(Bc[i]*c1'*c1*sum([Bc[j]'*R'*yc[:,j] for j = 1:N])) for i = 1:N])
-        L4 += lam*sum([Ω1(yc[:,i])'*Ω2(Bc[i]*c1'*c1*sum([Bc[j]'*R'*yc[:,j] for j = 1:N])) for i = 1:N])'
-        L4 += lam*sum([Ω1(yc[:,i])'*Ω2(Bc[i]*c1'*c1*sum([Bc[j]'*R'*yc[:,j] for j = 1:N])) for i = 1:N])
-        L4 += lam*sum([Ω1(yc[:,i])'*Ω2(Bc[i]*c1'*c1*sum([Bc[j]'*R'*yc[:,j] for j = 1:N])) for i = 1:N])'
-        L5  = -2*sum([Ω1(yc[:,i])'*Ω2(Bc[i]*c1*sum([Bc[j]'*R'*yc[:,j] for j = 1:N])) for i = 1:N])
-        L5 += -2*sum([Ω1(yc[:,i])'*Ω2(Bc[i]*c1*sum([Bc[j]'*R'*yc[:,j] for j = 1:N])) for i = 1:N])'
-        L5 += -2*sum([Ω1(yc[:,j])'*Ω2(Bc[j]*c1'*sum([Bc[i]'*R'*yc[:,i] for i = 1:N])) for j = 1:N])
-        L5 += -2*sum([Ω1(yc[:,j])'*Ω2(Bc[j]*c1'*sum([Bc[i]'*R'*yc[:,i] for i = 1:N])) for j = 1:N])'
-        L6  = sum(Ω1(yc[:,k])'*Ω2(Bc[k]*c1'*sum([Bc[i]'*Bc[i] for i = 1:N])'*c1*sum([Bc[j]'*R'*yc[:,j] for j = 1:N])) for k = 1:N)
-        L6 += sum(Ω1(yc[:,k])'*Ω2(Bc[k]*c1'*sum([Bc[i]'*Bc[i] for i = 1:N])'*c1*sum([Bc[j]'*R'*yc[:,j] for j = 1:N])) for k = 1:N)'
-        L6 += sum(Ω1(yc[:,k])'*Ω2(Bc[k]*c1'*sum([Bc[i]'*Bc[i] for i = 1:N])'*c1*sum([Bc[j]'*R'*yc[:,j] for j = 1:N])) for k = 1:N)
-        L6 += sum(Ω1(yc[:,k])'*Ω2(Bc[k]*c1'*sum([Bc[i]'*Bc[i] for i = 1:N])'*c1*sum([Bc[j]'*R'*yc[:,j] for j = 1:N])) for k = 1:N)'
+        Bry = sum([Bc[j]'*R'*yc[:,j] for j = 1:N])
+        for i = 1:N
+            if lam > 0.
+                L4 += 2*lam*Ω1(yc[:,i])'*Ω2(Bc[i]*c1'*c1*Bry)
+            end
+            L5 += -2*Ω1(yc[:,i])'*Ω2(Bc[i]*(c1+c1')*Bry)
+            L6 += 2*Ω1(yc[:,i])'*Ω2(Bc[i]*c1'*Bc2'*c1*Bry)
+        end
+        L4 += L4'
+        L5 += L5'
+        L6 += L6'
         return q'*(1/2*(L1 + L2 + L3) + 1/4*(L4 + L5 + L6))*q + L
     end
 
@@ -328,7 +357,7 @@ function solvePACE_scf(prob, y, weights, lam=0.; grid=false)
     q_scf = zeros(4)
     obj = 100.
     # repeat just to make sure
-    for i = 1:(if grid 1 else 10 end)
+    for i = 1:(if grid 1 else 1 end)
         # look for the eigenvector q corresponding to the MINIMUM eigenvalue of ℒ(q)
         q_guess = normalize(randn(4))
         for _ = 1:Int(1e3)
@@ -394,9 +423,9 @@ function solvePACE_scf(prob, y, weights, lam=0.; grid=false)
 end
 
 ### Simulate!
-σm = 1.0
+σm = 0.1
 
-repeats = 10000
+repeats = 1
 gaps = zeros(repeats)
 R_errs = zeros(repeats,3)
 p_errs = zeros(repeats,3)
