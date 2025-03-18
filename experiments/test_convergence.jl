@@ -75,7 +75,7 @@ end
 σm = 1.0
 # Random.seed!(7) # produces 3 near-identical solutions
 # other seeds: 14, 20, 24, 32, 41, 56, 60, 63, 78, 84
-Random.seed!(14)
+Random.seed!(7)
 
 ℒ, obj, gt = setup(σm)
 
@@ -87,7 +87,7 @@ function scf(ℒ; eigval=1, q0=nothing, quat_log=nothing)
         q_scf = normalize(randn(4))
     end
     q_log = [q_scf]
-    for i = 1:Int(1e3)
+    for _ = 1:Int(1e3)
         mat = ℒ(q_scf)
         q_new = eigvecs(mat)[:,eigval]
         normalize!(q_new)
@@ -101,13 +101,11 @@ function scf(ℒ; eigval=1, q0=nothing, quat_log=nothing)
                 end
             end
             if !new
-                # println("SCF break ($i iterations).")
                 break
             end
         end
 
         if abs(abs(q_scf'*q_new) - 1) < 1e-8
-            # println("SCF converged ($i iterations).")
             q_scf = q_new
             break
         end
@@ -144,7 +142,7 @@ end
 
 # plot
 import Plots
-q_scf = q_logs[2][end]
+q_scf = q_logs[1][end]
 # p1 = Plots.plot()
 p2 = Plots.plot3d()
 for q_log in all_q_logs
@@ -155,22 +153,25 @@ for q_log in all_q_logs
     if abs(abs(q_log[end]'*q_scf) - 1) < 1e-5
         # Plots.plot!(p1, norm_seq, label=false, lc=:blue)
         # local colors = Plots.cgrad(:blues, length(q_log), categorical = true)
-        Plots.scatter3d!(p2, qs[1,:], qs[2,:], qs[3,:], label="toq2", aspect_ratio=:equal, mc=:blue) #color=collect(colors))
+        Plots.scatter3d!(p2, qs[1,:], qs[2,:], qs[3,:], label="toq1", aspect_ratio=:equal, mc=:blue) #color=collect(colors))
     else
         # Plots.plot!(p1, norm_seq, label=false, lc=:red)
         # local colors = Plots.cgrad(:heat, length(q_log), categorical = true)
-        Plots.scatter3d!(p2, qs[1,:], qs[2,:], qs[3,:], label="toq1", aspect_ratio=:equal, mc=:red) #color=collect(colors))
+        Plots.scatter3d!(p2, qs[1,:], qs[2,:], qs[3,:], label="toq2", aspect_ratio=:equal, mc=:red) #color=collect(colors))
     end
+    break
 end
 
 q1 = proj_quat(q_logs[1][end])
 q1m = proj_quat(-q_logs[1][end])
-q2 = proj_quat(q_logs[2][end])
-q2m = proj_quat(-q_logs[2][end])
 Plots.scatter3d!(p2, [q1[1]], [q1[2]], [q1[3]], markershape=:cross, ms=10, label="q1")
 Plots.scatter3d!(p2, [q1m[1]], [q1m[2]], [q1m[3]], markershape=:cross, ms=10, label="q1")
+if length(q_logs) > 1
+q2 = proj_quat(q_logs[2][end])
+q2m = proj_quat(-q_logs[2][end])
 Plots.scatter3d!(p2, [q2[1]], [q2[2]], [q2[3]], markershape=:cross, ms=10, label="q2")
 Plots.scatter3d!(p2, [q2m[1]], [q2m[2]], [q2m[3]], markershape=:cross, ms=10, label="q2")
+end
 Plots.scatter3d!(p2,aspect_ratio=1,xlim=[-2,2],ylim=[-2,2],zlim=[-2,2])
 
 
@@ -191,3 +192,54 @@ end
 if !issorted(obj.(q_log), rev=true)
     printstyled("Objectives not monotonic.\n"; color=:red)
 end
+
+
+## Alg for sampling away from points
+grid = randn(4,1000)
+grid = normalize.(eachcol(grid))
+dists = 100*ones(1000)
+
+function furthest()
+    # sample point furthest from all points visited
+    global grid, visited, dists
+    # 1) sample
+    sample = grid[argmax(dists)]
+    # 2) update distances
+    dists = min.(dists, norm.(grid .- [sample]))
+    return sample
+end
+
+q_guess = normalize(randn(4))
+q_scf, q_log = scf(ℒ; q0=q_guess)
+
+# check for multiple solutions
+q_logs = [q_log]
+all_q_logs = [q_log]
+for iter = 1:1000
+    q0_new = furthest()
+
+    local q_scf, q_log, new = scf(ℒ; q0=q0_new, quat_log=q_logs)
+    push!(all_q_logs, q_log)
+    if new
+        println("New min found at iteration $iter.")
+        push!(q_logs, q_log)
+    end
+end
+
+p3 = Plots.plot3d()
+for q_log in all_q_logs
+    local qs = reduce(hcat, q_log)
+    local norm_seq = min.(norm.(eachcol(qs) .- [q_scf]), norm.(eachcol(qs) .+ [q_scf]))
+    local qs = reduce(hcat, proj_quat.(q_log))
+
+    if abs(abs(q_log[end]'*q_scf) - 1) < 1e-5
+        # Plots.plot!(p1, norm_seq, label=false, lc=:blue)
+        # local colors = Plots.cgrad(:blues, length(q_log), categorical = true)
+        Plots.scatter3d!(p3, qs[1,:], qs[2,:], qs[3,:], label="toq1", aspect_ratio=:equal, mc=:blue) #color=collect(colors))
+    else
+        # Plots.plot!(p1, norm_seq, label=false, lc=:red)
+        # local colors = Plots.cgrad(:heat, length(q_log), categorical = true)
+        Plots.scatter3d!(p3, qs[1,:], qs[2,:], qs[3,:], label="toq2", aspect_ratio=:equal, mc=:red) #color=collect(colors))
+    end
+end
+Plots.scatter3d!(p3,aspect_ratio=1,xlim=[-2,2],ylim=[-2,2],zlim=[-2,2])
