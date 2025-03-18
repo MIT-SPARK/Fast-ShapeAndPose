@@ -479,7 +479,7 @@ function simulate(; σm = 0.1, repeats = 1)
 end
 
 # simulate
-gaps, R_errs, p_errs, c_errs, objs, datas = simulate(σm = 1.0, repeats = 1000)
+gaps, R_errs, p_errs, c_errs, objs, datas = simulate(σm = 0.5, repeats = 1)
 
 ### Plot!
 import Plots

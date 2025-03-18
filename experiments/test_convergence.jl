@@ -73,61 +73,121 @@ end
 
 # parameters
 σm = 1.0
-repeats = 100000
+# Random.seed!(7) # produces 3 near-identical solutions
+# other seeds: 14, 20, 24, 32, 41, 56, 60, 63, 78, 84
+Random.seed!(14)
 
-bad = []
-bad2 = []
-for i = 1:repeats
-    L, obj, gt = setup(σm)
+ℒ, obj, gt = setup(σm)
 
-    ## solve via SCF
-    function scf(ℒ, obj; eigval=1, q0=nothing)
-        q_scf = q0
-        q_log = [q0]
-        obj_log = [obj(q0)]
-        if isnothing(q0)
-            q_scf = normalize(randn(4))
-        end
-        for i = 1:Int(1e6)
-            mat = ℒ(q_scf)
-            q_new = eigvecs(mat)[:,eigval]
-            normalize!(q_new)
+## solve via SCF
+function scf(ℒ; eigval=1, q0=nothing, quat_log=nothing)
+    q_scf = q0
+    new = true
+    if isnothing(q0)
+        q_scf = normalize(randn(4))
+    end
+    q_log = [q_scf]
+    for i = 1:Int(1e3)
+        mat = ℒ(q_scf)
+        q_new = eigvecs(mat)[:,eigval]
+        normalize!(q_new)
 
-            push!(q_log, q_new)
-            append!(obj_log, obj(q_new))
-
-            if abs(abs(q_scf'*q_new) - 1) < 1e-8
-                # println("SCF converged ($i iterations).")
-                q_scf = q_new
+        push!(q_log, q_new)
+        if !isnothing(quat_log)
+            for quat in quat_log
+                if abs(abs(q_new'*quat[end]) - 1) < 1e-5
+                    new = false
+                    break
+                end
+            end
+            if !new
+                # println("SCF break ($i iterations).")
                 break
             end
-            q_scf = q_new
         end
-        return q_scf, q_log, obj_log
-    end
-    q_guess = normalize(randn(4))
-    q_scf, q_log, obj_log = scf(L, obj; q0=q_guess)
 
-    # check monotonic decreasing:
-    qs = reduce(hcat, q_log)
-    norm_seq = min.(norm.(eachcol(qs) .- [q_scf]), norm.(eachcol(qs) .+ [q_scf])) # chordal distance (analog)
-    function angdif(q)
-        ΔR = quat2rotm(q_scf)'*quat2rotm(q)
-        _, e = rotm2axang(clamp.(ΔR, -1., 1.))
-        return e
+        if abs(abs(q_scf'*q_new) - 1) < 1e-8
+            # println("SCF converged ($i iterations).")
+            q_scf = q_new
+            break
+        end
+        q_scf = q_new
     end
-    norm_seq2 = angdif.(eachcol(qs))
+    return q_scf, q_log, new
+end
+q_guess = normalize(randn(4))
+q_scf, q_log = scf(ℒ; q0=q_guess)
 
-    if !issorted(norm_seq,rev=true)
-        printstyled("($i) Norms not monotonic.\n"; color=:red)
-        push!(bad, norm_seq)
-        push!(bad2, norm_seq2)
+# check for multiple solutions
+q_logs = [q_log]
+all_q_logs = [q_log]
+for _ = 1:1000
+    local q_scf, q_log, new = scf(ℒ; quat_log=q_logs)
+    if new
+        push!(q_logs, q_log)
     end
-    if !issorted(obj_log, rev=true)
-        printstyled("($i) Objectives not monotonic.\n"; color=:red)
+    push!(all_q_logs, q_log)
+end
+println("Found $(length(q_logs)) solutions.")
+
+objs = obj.([ql[end] for ql in q_logs])
+
+# projecting quaternions to 3D:
+function proj_quat(q)
+    q_proj = q[2:end]
+    if q[1] < 0
+        # q_proj = clamp.(1. ./ q_proj,-2,2)
+        q_proj = -q_proj
+    end
+    return q_proj
+end
+
+# plot
+import Plots
+q_scf = q_logs[2][end]
+# p1 = Plots.plot()
+p2 = Plots.plot3d()
+for q_log in all_q_logs
+    local qs = reduce(hcat, q_log)
+    local norm_seq = min.(norm.(eachcol(qs) .- [q_scf]), norm.(eachcol(qs) .+ [q_scf]))
+    local qs = reduce(hcat, proj_quat.(q_log))
+
+    if abs(abs(q_log[end]'*q_scf) - 1) < 1e-5
+        # Plots.plot!(p1, norm_seq, label=false, lc=:blue)
+        # local colors = Plots.cgrad(:blues, length(q_log), categorical = true)
+        Plots.scatter3d!(p2, qs[1,:], qs[2,:], qs[3,:], label="toq2", aspect_ratio=:equal, mc=:blue) #color=collect(colors))
+    else
+        # Plots.plot!(p1, norm_seq, label=false, lc=:red)
+        # local colors = Plots.cgrad(:heat, length(q_log), categorical = true)
+        Plots.scatter3d!(p2, qs[1,:], qs[2,:], qs[3,:], label="toq1", aspect_ratio=:equal, mc=:red) #color=collect(colors))
     end
 end
 
-# import Plots
-Plots.plot(obj_log, label=false, title="Objective Log")
-Plots.plot!(yscale=:log10, legend=:bottom, xlabel="Iteration", ylabel="Objective")
+q1 = proj_quat(q_logs[1][end])
+q1m = proj_quat(-q_logs[1][end])
+q2 = proj_quat(q_logs[2][end])
+q2m = proj_quat(-q_logs[2][end])
+Plots.scatter3d!(p2, [q1[1]], [q1[2]], [q1[3]], markershape=:cross, ms=10, label="q1")
+Plots.scatter3d!(p2, [q1m[1]], [q1m[2]], [q1m[3]], markershape=:cross, ms=10, label="q1")
+Plots.scatter3d!(p2, [q2[1]], [q2[2]], [q2[3]], markershape=:cross, ms=10, label="q2")
+Plots.scatter3d!(p2, [q2m[1]], [q2m[2]], [q2m[3]], markershape=:cross, ms=10, label="q2")
+Plots.scatter3d!(p2,aspect_ratio=1,xlim=[-2,2],ylim=[-2,2],zlim=[-2,2])
+
+
+
+# check monotonic decreasing:
+qs = reduce(hcat, q_log)
+norm_seq = min.(norm.(eachcol(qs) .- [q_scf]), norm.(eachcol(qs) .+ [q_scf])) # chordal distance (analog)
+function angdif(q)
+    ΔR = quat2rotm(q_scf)'*quat2rotm(q)
+    _, e = rotm2axang(clamp.(ΔR, -1., 1.))
+    return e
+end
+norm_seq2 = angdif.(eachcol(qs))
+
+if !issorted(norm_seq,rev=true)
+    printstyled("Norms not monotonic.\n"; color=:red)
+end
+if !issorted(obj.(q_log), rev=true)
+    printstyled("Objectives not monotonic.\n"; color=:red)
+end
