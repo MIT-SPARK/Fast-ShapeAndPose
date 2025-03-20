@@ -258,12 +258,12 @@ function solvePACE_scf(prob, y, weights, lam=0.; grid=100)
     # still need to add in weights
 
     ## eliminate position
-    ybar = mean(eachcol(y))
-    Bbar = mean(eachslice(prob.B,dims=2))
+    ybar = sum(weights .* eachcol(y)) ./ sum(weights)
+    Bbar = sum(weights .* eachslice(prob.B,dims=2)) ./ sum(weights)
 
     ## eliminate shape
-    Bc = eachslice(prob.B,dims=2) .- [Bbar]
-    yc = reduce(hcat, eachcol(y) .- [ybar])
+    Bc = (eachslice(prob.B,dims=2) .- [Bbar]).*sqrt.(weights)
+    yc = reduce(hcat, (eachcol(y) .- [ybar]).*sqrt.(weights))
     Bc2 = sum([Bc[i]'*Bc[i] for i = 1:N])
     A = 2*(Bc2 + lam*I)
     invA = inv(A)
@@ -431,7 +431,7 @@ function simulate(; σm = 0.1, repeats = 1)
         objs[i,1] = obj_tssos
         objs[i,2] = obj_manopt
         objs[i,3] = obj_scf
-        push!(datas, (ℒ, rotm2quat(soln_tssos.R), rotm2quat(soln_manopt.R), rotm2quat(soln_scf.R), prob, gt, y, qs))
+        push!(datas, (ℒ, rotm2quat(soln_tssos.R), rotm2quat(soln_manopt.R), rotm2quat(soln_scf.R), prob, gt, y))
         if i % 10 == 0
             print("$i ")
         end

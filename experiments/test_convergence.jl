@@ -75,7 +75,7 @@ end
 σm = 1.0
 # Random.seed!(7) # produces 3 near-identical solutions
 # other seeds: 14, 20, 24, 32, 41, 56, 60, 63, 78, 84
-Random.seed!(7)
+Random.seed!(14)
 
 ℒ, obj, gt = setup(σm)
 
@@ -159,7 +159,6 @@ for q_log in all_q_logs
         # local colors = Plots.cgrad(:heat, length(q_log), categorical = true)
         Plots.scatter3d!(p2, qs[1,:], qs[2,:], qs[3,:], label="toq2", aspect_ratio=:equal, mc=:red) #color=collect(colors))
     end
-    break
 end
 
 q1 = proj_quat(q_logs[1][end])
@@ -235,11 +234,17 @@ for q_log in all_q_logs
     if abs(abs(q_log[end]'*q_scf) - 1) < 1e-5
         # Plots.plot!(p1, norm_seq, label=false, lc=:blue)
         # local colors = Plots.cgrad(:blues, length(q_log), categorical = true)
-        Plots.scatter3d!(p3, qs[1,:], qs[2,:], qs[3,:], label="toq1", aspect_ratio=:equal, mc=:blue) #color=collect(colors))
+        Plots.scatter3d!(p3, qs[1,:], qs[2,:], qs[3,:], label="toq1", aspect_ratio=:equal, mc=:blue,ms=2) #color=collect(colors))
     else
         # Plots.plot!(p1, norm_seq, label=false, lc=:red)
         # local colors = Plots.cgrad(:heat, length(q_log), categorical = true)
-        Plots.scatter3d!(p3, qs[1,:], qs[2,:], qs[3,:], label="toq2", aspect_ratio=:equal, mc=:red) #color=collect(colors))
+        Plots.scatter3d!(p3, qs[1,:], qs[2,:], qs[3,:], label="toq2", aspect_ratio=:equal, mc=:red,ms=2) #color=collect(colors))
     end
+end
+Plots.scatter3d!(p3, [q1[1]], [q1[2]], [q1[3]], markershape=:cross, ms=10, label="q1")
+Plots.scatter3d!(p3, [q1m[1]], [q1m[2]], [q1m[3]], markershape=:cross, ms=10, label="q1")
+if length(q_logs) > 1
+Plots.scatter3d!(p3, [q2[1]], [q2[2]], [q2[3]], markershape=:cross, ms=10, label="q2")
+Plots.scatter3d!(p3, [q2m[1]], [q2m[2]], [q2m[3]], markershape=:cross, ms=10, label="q2")
 end
 Plots.scatter3d!(p3,aspect_ratio=1,xlim=[-2,2],ylim=[-2,2],zlim=[-2,2])
