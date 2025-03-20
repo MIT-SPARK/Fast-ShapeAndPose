@@ -350,23 +350,18 @@ function solvePACE_scf(prob, y, weights, lam=0.; grid=100)
     q_guess = normalize.(eachcol(randn(4, grid)))
     dists = 100*ones(grid)
 
-    # OPTION 2: furthest point sampling
+    # Repeat and do farthest point sampling
+    # TODO: can accelerate this
     q_scfs = []
-    # lastidx = 0
-    for idx = 1:15
+    for idx = 1:min(grid, 15)
         q0_new = q_guess[argmax(dists)]
         dists = min.(dists, norm.(q_guess .- [q0_new]))
         
         q_scf, new = scf(q0_new; quat_log=q_scfs)
         if new
             push!(q_scfs, q_scf)
-            # lastidx = idx
         end
     end
-
-    # OPTION 1: brute force
-    # q_scfs = scf.(q_guess)
-
 
     objs = obj.(q_scfs)
     minidx = argmin(objs)
