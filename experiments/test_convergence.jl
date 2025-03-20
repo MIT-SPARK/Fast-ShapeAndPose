@@ -8,15 +8,14 @@ function setup(σm)
 
     K = prob.K
     N = prob.N
-    # still need to add in weights
 
     ## eliminate position
-    ybar = mean(eachcol(y))
-    Bbar = mean(eachslice(prob.B,dims=2))
+    ybar = sum(weights .* eachcol(y)) ./ sum(weights)
+    Bbar = sum(weights .* eachslice(prob.B,dims=2)) ./ sum(weights)
 
     ## eliminate shape
-    Bc = eachslice(prob.B,dims=2) .- [Bbar]
-    yc = reduce(hcat, eachcol(y) .- [ybar])
+    Bc = (eachslice(prob.B,dims=2) .- [Bbar]).*sqrt.(weights)
+    yc = reduce(hcat, (eachcol(y) .- [ybar]).*sqrt.(weights))
     Bc2 = sum([Bc[i]'*Bc[i] for i = 1:N])
     A = 2*(Bc2 + lam*I)
     invA = inv(A)

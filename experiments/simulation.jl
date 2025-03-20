@@ -250,19 +250,19 @@ function Ω2(q)
      q[4]  q[3] -q[2]  q[1]]
 end
 
-# weights not currently working
-function solvePACE_scf(prob, y, weights, lam=0.; grid=false)
+
+function solvePACE_scf(prob, y, weights, lam=0.; grid=100)
+    ## SETUP
     K = prob.K
     N = prob.N
-    # still need to add in weights
 
     ## eliminate position
-    ybar = mean(eachcol(y))
-    Bbar = mean(eachslice(prob.B,dims=2))
+    ybar = sum(weights .* eachcol(y)) ./ sum(weights)
+    Bbar = sum(weights .* eachslice(prob.B,dims=2)) ./ sum(weights)
 
     ## eliminate shape
-    Bc = eachslice(prob.B,dims=2) .- [Bbar]
-    yc = reduce(hcat, eachcol(y) .- [ybar])
+    Bc = (eachslice(prob.B,dims=2) .- [Bbar]).*sqrt.(weights)
+    yc = reduce(hcat, (eachcol(y) .- [ybar]).*sqrt.(weights))
     Bc2 = sum([Bc[i]'*Bc[i] for i = 1:N])
     A = 2*(Bc2 + lam*I)
     invA = inv(A)
@@ -270,30 +270,27 @@ function solvePACE_scf(prob, y, weights, lam=0.; grid=false)
     c1 = 2*(invA - invA*ones(K)*inv(ones(K)'*invA*ones(K))*ones(K)'*invA)
     c2 = invA*ones(K)*inv(ones(K)'*invA*ones(K))
 
-    """
-    Lagrangian derivative without `μ(1-q'*q)`
-    """
-    function ℒ(q) # \scrL
-        # optimize ideas:
-        # - convert arrays to for loops
-        # - try @view
-        # - exploit symmetry (declare arrays as symmetric, update symmetrically)
-        
-        # linear in q
-        L1 = zeros(4,4)
-        L2 = zeros(4,4)
-        L3 = zeros(4,4)
-        for i = 1:N
-            L1 += -2*Ω1(yc[:,i])'*Ω2(Bc[i]*c2)
-            if lam > 0.
-                L3 +=  2*lam*Ω1(yc[:,i])'*Ω2(Bc[i]*c1'*c2)
-                L2 +=  2*Ω1(yc[:,i])'*Ω2(Bc[i]*c1'*Bc2*c2) # (c1'*Bc2*c2 = 0 if lam=0)
-            end
+    ## Lagrangian terms
+    # constant
+    L = sum([yc[:,i]'*yc[:,i] for i = 1:N])
+    L += c2'*Bc2*c2
+    L += lam*(c2'*c2)
+    # quadratic in q
+    L1 = zeros(4,4)
+    L2 = zeros(4,4)
+    L3 = zeros(4,4)
+    for i = 1:N
+        L1 += -2*Ω1(yc[:,i])'*Ω2(Bc[i]*c2)
+        if lam > 0.
+            L3 +=  2*lam*Ω1(yc[:,i])'*Ω2(Bc[i]*c1'*c2)
+            L2 +=  2*Ω1(yc[:,i])'*Ω2(Bc[i]*c1'*Bc2*c2) # (c1'*Bc2*c2 = 0 if lam=0)
         end
-        L1 += L1'
-        L2 += L2'
-        L3 += L3'
-        # quadratic in q
+    end
+    L1 += L1'
+    L2 += L2'
+    L3 += L3'
+    # quartic in q
+    function Lquartic(q)
         L4 = zeros(4,4)
         L5 = zeros(4,4)
         L6 = zeros(4,4)
@@ -309,117 +306,81 @@ function solvePACE_scf(prob, y, weights, lam=0.; grid=false)
         L4 += L4'
         L5 += L5'
         L6 += L6'
-        return L1 + L2 + L3 + (L4 + L5 + L6)
-    end
-    """
-    Full objective value.
-    """
-    function ℒ2(q) # \scrL
-        L = sum([yc[:,i]'*yc[:,i] for i = 1:N])
-        L += c2'*Bc2*c2
-        L += lam*(c2'*c2)
-
-        # linear in q
-        L1 = zeros(4,4)
-        L2 = zeros(4,4)
-        L3 = zeros(4,4)
-        for i = 1:N
-            L1 += -2*Ω1(yc[:,i])'*Ω2(Bc[i]*c2)
-            if lam > 0.
-                L3 +=  2*lam*Ω1(yc[:,i])'*Ω2(Bc[i]*c1'*c2)
-                L2 +=  2*Ω1(yc[:,i])'*Ω2(Bc[i]*c1'*Bc2*c2) # (c1'*Bc2*c2 = 0 if lam=0)
-            end
-        end
-        L1 += L1'
-        L2 += L2'
-        L3 += L3'
-
-        # quadratic in q
-        L4 = zeros(4,4)
-        L5 = zeros(4,4)
-        L6 = zeros(4,4)
-        R = quat2rotm(q)
-        Bry = sum([Bc[j]'*R'*yc[:,j] for j = 1:N])
-        for i = 1:N
-            if lam > 0.
-                L4 += 2*lam*Ω1(yc[:,i])'*Ω2(Bc[i]*c1'*c1*Bry)
-            end
-            L5 += -2*Ω1(yc[:,i])'*Ω2(Bc[i]*(c1+c1')*Bry)
-            L6 += 2*Ω1(yc[:,i])'*Ω2(Bc[i]*c1'*Bc2'*c1*Bry)
-        end
-        L4 += L4'
-        L5 += L5'
-        L6 += L6'
-        return q'*(1/2*(L1 + L2 + L3) + 1/4*(L4 + L5 + L6))*q + L
+        return L4 + L5 + L6
     end
 
-    ## Optimal solution:
-    q_scf = zeros(4)
-    obj = 100.
-    # repeat just to make sure
-    for i = 1:(if grid 1 else 1 end)
-        # look for the eigenvector q corresponding to the MINIMUM eigenvalue of ℒ(q)
-        q_guess = normalize(randn(4))
-        for _ = 1:Int(1e3)
-            mat = ℒ(q_guess)
-            q_new = eigvecs(mat)[:,1]; normalize!(q_new); # SCF
-            # q_new = normalize(mat*q_guess) # Power iteration
-            if abs(abs(q_guess'*q_new) - 1) < 1e-8
-                q_guess = q_new
+    # objective
+    obj(q) = q'*(1/2*(L1 + L2 + L3) + 1/4*Lquartic(q))*q + L
+    # Lagrangian
+    ℒ(q) = L1 + L2 + L3 + Lquartic(q)
+    
+    ## SOLVE
+    # self-consistent field iteration function
+    function scf(q_scf; quat_log=nothing)
+        new = false
+        for _ = 1:Int(100)
+            mat = ℒ(q_scf)
+            q_new = eigvecs(mat)[:,1]
+            normalize!(q_new)
+    
+            if !isnothing(quat_log)
+                doublebreak = false
+                for quat in quat_log
+                    if abs(abs(q_new'*quat) - 1) < 1e-5
+                        doublebreak = true
+                        break
+                    end
+                end
+                if doublebreak
+                    break
+                end
+            end
+    
+            if abs(abs(q_scf'*q_new) - 1) < 1e-6
+                q_scf = q_new
+                new = true
                 break
             end
-            q_guess = q_new
+            q_scf = q_new
         end
-        obj_mat = ℒ2(q_guess)
-        if obj_mat < obj
-            obj = obj_mat
-            q_scf = q_guess
+        return q_scf, new
+    end
+
+    # solve to optimality
+    q_guess = normalize.(eachcol(randn(4, grid)))
+    dists = 100*ones(grid)
+
+    # OPTION 2: furthest point sampling
+    q_scfs = []
+    # lastidx = 0
+    for idx = 1:15
+        q0_new = q_guess[argmax(dists)]
+        dists = min.(dists, norm.(q_guess .- [q0_new]))
+        
+        q_scf, new = scf(q0_new; quat_log=q_scfs)
+        if new
+            push!(q_scfs, q_scf)
+            # lastidx = idx
         end
     end
 
-    # Convert to solution
+    # OPTION 1: brute force
+    # q_scfs = scf.(q_guess)
+
+
+    objs = obj.(q_scfs)
+    minidx = argmin(objs)
+    q_scf = q_scfs[minidx]
+    obj_val = objs[minidx]
+
+    # convert to solution
     R_est = quat2rotm(q_scf)
     c_est = reshape(c1*sum([Bc[i]'*R_est'*yc[:,i] for i = 1:prob.N]) + c2,prob.K,1)
     p_est = ybar - R_est*Bbar*c_est
 
     soln = Solution(c_est, p_est, R_est)
 
-    obj = ℒ2(q_scf)
-
-    # for grid
-    qs = [q_scf]
-    if grid
-        # search for other maximum eigenvectors!
-        for i = 1:2000
-            q_guess = normalize(randn(4))
-            for i = 1:100
-                mat = ℒ(q_guess)
-                q_new = eigvecs(mat)[:,1]
-
-                # stop if too close to q_scf
-                extrabreak = false
-                for quat in qs
-                    if abs(abs(q_new'*quat) - 1) < 1e-5
-                        extrabreak = true
-                        break
-                    end
-                end
-                if extrabreak
-                    break
-                end
-
-                # stop if constant
-                if abs(abs(q_guess'*q_new) - 1) < 1e-8
-                    push!(qs, q_guess)
-                    break
-                end
-
-                q_guess = q_new
-            end
-        end
-    end
-    
-    return soln, ℒ, obj, qs
+    return soln, ℒ, obj_val
 end
 
 ### Simulate!
@@ -442,7 +403,7 @@ function simulate(; σm = 0.1, repeats = 1)
         # Solve
         soln_tssos, gap_tssos, obj_tssos = solvePACE_TSSOS(prob, y, weights, lam)
         soln_manopt, obj_manopt = solvePACE_Manopt(prob, y, weights, lam)
-        soln_scf, ℒ, obj_scf, qs = solvePACE_scf(prob, y, weights, lam; grid=false) #(gap_tssos > 1e-5))
+        soln_scf, ℒ, obj_scf = solvePACE_scf(prob, y, weights, lam; grid=100) #(gap_tssos > 1e-5))
 
         # Compute Errors
         _, R_err_tssos = rotm2axang(gt.R'*soln_tssos.R); R_err_tssos *= 180/π
@@ -469,7 +430,7 @@ function simulate(; σm = 0.1, repeats = 1)
         objs[i,1] = obj_tssos
         objs[i,2] = obj_manopt
         objs[i,3] = obj_scf
-        push!(datas, (ℒ, rotm2quat(soln_tssos.R), rotm2quat(soln_manopt.R), rotm2quat(soln_scf.R), prob, gt, y, qs))
+        push!(datas, (ℒ, rotm2quat(soln_tssos.R), rotm2quat(soln_manopt.R), rotm2quat(soln_scf.R), prob, gt, y))
         if i % 10 == 0
             print("$i ")
         end
@@ -493,6 +454,11 @@ Plots.plot!(xscale=:log10, legend=:bottom, xlabel="Suboptimality Gap", ylabel="S
 p3 = Plots.scatter(abs.(gaps), R_errs[:,2:3] .- R_errs[:,1], label=["Local" "SCF"], title="Difference from SDP")
 Plots.plot!(xscale=:log10, legend=:bottom, xlabel="Suboptimality Gap", ylabel="Rot Error (deg)")
 
-### debugging
-# q_ts = data[4]
-# q_scf = data[5]
+function timesolver(solver, σm)
+    prob, gt, y = genproblem(σm=σm)
+    lam = 0.0
+    weights = ones(prob.N)
+
+    # Solve
+    return solver(prob, y, weights, lam)
+end
