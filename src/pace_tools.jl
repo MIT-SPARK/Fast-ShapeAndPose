@@ -283,7 +283,7 @@ max iterations to look for local solution.
 For global solutions, `grid` discretizes the space and `global_iters` 
 dictates how many initial conditions to try.
 """
-function solvePACE_SCF(prob, y, weights, lam=0.; grid=100, local_iters=100, global_iters=15)
+function solvePACE_SCF(prob, y, weights, lam=0.; grid=100, local_iters=100, global_iters=15, logs=false, all_logs=false)
     ## SETUP
     K = prob.K
     N = prob.N
@@ -357,7 +357,7 @@ function solvePACE_SCF(prob, y, weights, lam=0.; grid=100, local_iters=100, glob
             normalize!(q_new)
             push!(log, q_new)
     
-            if !isnothing(quat_log)
+            if !isnothing(quat_log) && !all_logs
                 doublebreak = false
                 for quat in quat_log
                     if abs(abs(q_new'*quat) - 1) < 1e-5
@@ -411,5 +411,8 @@ function solvePACE_SCF(prob, y, weights, lam=0.; grid=100, local_iters=100, glob
 
     soln = Solution(c_est, p_est, R_est)
 
-    return soln, obj_val, q_logs
+    if logs
+        return soln, obj_val, q_logs, ℒ, obj
+    end
+    return soln, obj_val
 end
