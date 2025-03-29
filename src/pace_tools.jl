@@ -350,10 +350,12 @@ function solvePACE_SCF(prob, y, weights, lam=0.; grid=100, local_iters=100, glob
     # self-consistent field iteration function
     function scf(q_scf; quat_log=nothing)
         new = false
+        log = [q_scf]
         for _ = 1:Int(local_iters)
             mat = ℒ(q_scf)
             q_new = eigvecs(mat)[:,1]
             normalize!(q_new)
+            push!(log, q_new)
     
             if !isnothing(quat_log)
                 doublebreak = false
@@ -375,7 +377,7 @@ function solvePACE_SCF(prob, y, weights, lam=0.; grid=100, local_iters=100, glob
             end
             q_scf = q_new
         end
-        return q_scf, new
+        return q_scf, new, log
     end
 
     # solve to optimality
@@ -385,13 +387,15 @@ function solvePACE_SCF(prob, y, weights, lam=0.; grid=100, local_iters=100, glob
     # Repeat and do farthest point sampling
     # TODO: can accelerate this
     q_scfs = []
+    q_logs = []
     for idx = 1:min(grid, global_iters)
         q0_new = q_guess[argmax(dists)]
         dists = min.(dists, norm.(q_guess .- [q0_new]))
         
-        q_scf, new = scf(q0_new; quat_log=q_scfs)
+        q_scf, new, q_log = scf(q0_new; quat_log=q_scfs)
         if new
             push!(q_scfs, q_scf)
+            push!(q_logs, q_log)
         end
     end
 
@@ -407,5 +411,5 @@ function solvePACE_SCF(prob, y, weights, lam=0.; grid=100, local_iters=100, glob
 
     soln = Solution(c_est, p_est, R_est)
 
-    return soln, obj_val
+    return soln, obj_val, q_logs
 end
