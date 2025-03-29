@@ -1,10 +1,14 @@
-# Solve simulated PACE problems with quaternion and SDP solvers.
-# Goal: produce quantitative results about tightness/accuracy.
+## Tools for generating and solving shape and pose estimation problems
+# Lorenzo Shaikewitz
+
+### SOLVERS
+# TSSOS: SDP relaxation
+# Manopt: local on-manifold
+# SCF: quaternion-based self-consistent field iteration
 
 using Random
 using Statistics
 using LinearAlgebra
-
 using Printf
 
 using LorenzoRotations
@@ -65,6 +69,15 @@ end
 ### TSSOS SOLVER
 using TSSOS
 using DynamicPolynomials
+
+"""
+    solvePACE_TSSOS(prob, y, weights[, lam=0.])
+
+Solve shape & pose estimation problem `prob` given measurements `y`
+with weight `weights`. Nonzero `lam` needed if more shapes than keypoints.
+
+Uses first order convex relaxation, which finds certifially globally optimal solutions.
+"""
 function solvePACE_TSSOS(prob, y, weights, lam=0.)
     @polyvar R[1:3,1:3]
     vars = vec(R)
@@ -135,14 +148,21 @@ function solvePACE_TSSOS(prob, y, weights, lam=0.)
     obj_est = obj(vec(R) => vec(soln.R))
     gap = (obj_est - opt) / (opt+1)
 
-    return soln, gap, opt
+    return soln, opt, gap
 end
 
-### MANOPT (LOCAL) SOLVER
+### Manopt (LOCAL) SOLVER
 using JuMP
 import Manifolds
 import Manopt
-### SOLVE VIA JuMP
+"""
+    solvePACE_Manopt(prob, y, weights[, lam=0.])
+
+Solve shape & pose estimation problem `prob` given measurements `y`
+with weight `weights`. Nonzero `lam` needed if more shapes than keypoints.
+
+Fast local solutions from an initial guess, but no guarantee of global optima.
+"""
 function solvePACE_Manopt(prob, y, weights, lam=0.)
     SO3 = Manifolds.Rotations(3)
 
@@ -211,6 +231,7 @@ function solvePACE_Manopt(prob, y, weights, lam=0.)
     return soln, value.(obj)
 end
 
+
 ### QUATERNION SOLVER (just SCF)
 """
     Ω1(q)
@@ -250,8 +271,19 @@ function Ω2(q)
      q[4]  q[3] -q[2]  q[1]]
 end
 
-# set grid = 1 to local solve only
-function solvePACE_scf(prob, y, weights, lam=0.; grid=100)
+"""
+    solvePACE_SCF(prob, y, weights[, lam=0.; grid=100, local_iters=100, global_iters=15])
+
+Solve shape & pose estimation problem `prob` given measurements `y`
+with weight `weights`. Nonzero `lam` needed if more shapes than keypoints.
+
+Hyper-fast local solutions with initial guess. `local_iters` controls 
+max iterations to look for local solution.
+
+For global solutions, `grid` discretizes the space and `global_iters` 
+dictates how many initial conditions to try.
+"""
+function solvePACE_SCF(prob, y, weights, lam=0.; grid=100, local_iters=100, global_iters=15)
     ## SETUP
     K = prob.K
     N = prob.N
@@ -318,7 +350,7 @@ function solvePACE_scf(prob, y, weights, lam=0.; grid=100)
     # self-consistent field iteration function
     function scf(q_scf; quat_log=nothing)
         new = false
-        for _ = 1:Int(100)
+        for _ = 1:Int(local_iters)
             mat = ℒ(q_scf)
             q_new = eigvecs(mat)[:,1]
             normalize!(q_new)
@@ -353,7 +385,7 @@ function solvePACE_scf(prob, y, weights, lam=0.; grid=100)
     # Repeat and do farthest point sampling
     # TODO: can accelerate this
     q_scfs = []
-    for idx = 1:min(grid, 15)
+    for idx = 1:min(grid, global_iters)
         q0_new = q_guess[argmax(dists)]
         dists = min.(dists, norm.(q_guess .- [q0_new]))
         
@@ -375,85 +407,5 @@ function solvePACE_scf(prob, y, weights, lam=0.; grid=100)
 
     soln = Solution(c_est, p_est, R_est)
 
-    return soln, ℒ, obj_val
-end
-
-### Simulate!
-function simulate(; σm = 0.1, repeats = 1)
-
-    gaps = zeros(repeats)
-    R_errs = zeros(repeats,3)
-    p_errs = zeros(repeats,3)
-    c_errs = zeros(repeats,3)
-    objs = zeros(repeats,3)
-
-    datas = []
-
-    for i = 1:repeats
-        # Define problem
-        prob, gt, y = genproblem(σm=σm)
-        lam = 0.0
-        weights = ones(prob.N)
-
-        # Solve
-        soln_tssos, gap_tssos, obj_tssos = solvePACE_TSSOS(prob, y, weights, lam)
-        soln_manopt, obj_manopt = solvePACE_Manopt(prob, y, weights, lam)
-        soln_scf, ℒ, obj_scf = solvePACE_scf(prob, y, weights, lam; grid=100) #(gap_tssos > 1e-5))
-
-        # Compute Errors
-        _, R_err_tssos = rotm2axang(gt.R'*soln_tssos.R); R_err_tssos *= 180/π
-        _, R_err_manopt = rotm2axang(gt.R'*soln_manopt.R); R_err_manopt *= 180/π
-        _, R_err_scf = rotm2axang(gt.R'*soln_scf.R); R_err_scf *= 180/π
-
-        p_errs[i,1] = norm(soln_tssos.p - gt.p)
-        p_errs[i,2] = norm(soln_manopt.p - gt.p)
-        p_errs[i,3] = norm(soln_scf.p - gt.p)
-        c_errs[i,1] = norm(soln_tssos.c - gt.c)
-        c_errs[i,2] = norm(soln_manopt.c - gt.c)
-        c_errs[i,3] = norm(soln_scf.c - gt.c)
-
-        # if R_err_scf - R_err_tssos > 10
-        #     global data = (R_err_scf, R_err_tssos, ℒ, rotm2quat(soln_tssos.R), rotm2quat(soln_scf.R), prob, gt, y)
-        #     break
-        # end
-
-        # Save
-        gaps[i] = gap_tssos
-        R_errs[i,1] = R_err_tssos
-        R_errs[i,2] = R_err_manopt
-        R_errs[i,3] = R_err_scf
-        objs[i,1] = obj_tssos
-        objs[i,2] = obj_manopt
-        objs[i,3] = obj_scf
-        push!(datas, (ℒ, rotm2quat(soln_tssos.R), rotm2quat(soln_manopt.R), rotm2quat(soln_scf.R), prob, gt, y))
-        if i % 10 == 0
-            print("$i ")
-        end
-    end
-
-    return gaps, R_errs, p_errs, c_errs, objs, datas
-end
-
-# simulate
-gaps, R_errs, p_errs, c_errs, objs, datas = simulate(σm = 0.5, repeats = 1)
-
-### Plot!
-import Plots
-
-p1 = Plots.scatter(abs.(gaps), p_errs[:,2:3] .- p_errs[:,1], label=["Local" "SCF"], title="Difference from SDP")
-Plots.plot!(xscale=:log10, legend=:bottom, xlabel="Suboptimality Gap", ylabel="Pos Error (m)")
-
-p2 = Plots.scatter(abs.(gaps), c_errs[:,2:3] .- c_errs[:,1], label=["Local" "SCF"], title="Difference from SDP")
-Plots.plot!(xscale=:log10, legend=:bottom, xlabel="Suboptimality Gap", ylabel="Shape Error")
-
-p3 = Plots.scatter(abs.(gaps), R_errs[:,2:3] .- R_errs[:,1], label=["Local" "SCF"], title="Difference from SDP")
-Plots.plot!(xscale=:log10, legend=:bottom, xlabel="Suboptimality Gap", ylabel="Rot Error (deg)")
-
-function timesolver(solver, σm)
-    prob, gt, y = genproblem(σm=σm)
-    lam = 0.0
-    weights = ones(prob.N)
-
-    # Solve
-    return solver(prob, y, weights, lam)
+    return soln, obj_val
 end
