@@ -16,6 +16,7 @@ function gnc(prob, y, solver; maxiterations=100, stopthresh=1e-6, μUpdate=1.4, 
     last_cost = 1e6
     Δcost = 1e6
     soln = nothing
+    μ = 0.05
 
     for iter in 1:maxiterations
         # termination conditions
@@ -41,7 +42,7 @@ function gnc(prob, y, solver; maxiterations=100, stopthresh=1e-6, μUpdate=1.4, 
         # weights update (eq. 14)
         last_weights = weights
         weights[residuals .<= μ/(μ+1)*cbar2] .= 1.
-        weights[residuals .> μ/(μ+1)*cbar2] = sqrt.(cbar2./residuals[residuals .> μ/(μ+1)*cbar2] * μ*(μ+1)) - μ
+        weights[residuals .> μ/(μ+1)*cbar2] = sqrt.(cbar2./residuals[residuals .> μ/(μ+1)*cbar2] * μ*(μ+1)) .- μ
         weights[residuals .>= (μ+1)/μ*cbar2] .= 0.
 
         # cost difference
@@ -50,10 +51,12 @@ function gnc(prob, y, solver; maxiterations=100, stopthresh=1e-6, μUpdate=1.4, 
 
         # update μ
         μ = μ*μUpdate
+
+        # @printf "%3d | cost: %.2e, weights: %.2f\n" iter cost sum(weights)
     end
 
     # return inliers + solution
-    inliers = ones(prob.N)[weights .> 1e-6]
+    inliers = collect(1:prob.N)[weights .> 1e-6]
     return soln, inliers
 
 end

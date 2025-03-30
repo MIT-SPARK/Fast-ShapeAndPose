@@ -82,6 +82,10 @@ function solvePACE_TSSOS(prob, y, weights, lam=0.)
     @polyvar R[1:3,1:3]
     vars = vec(R)
 
+    if sum(weights .!= 0) <= prob.K
+        lam = 0.1
+    end
+
     # symbolic expressions for c, p
     B = reshape(prob.B, 3*prob.N, prob.K)
     W = Diagonal(repeat(weights, inner=3))
@@ -165,6 +169,10 @@ Fast local solutions from an initial guess, but no guarantee of global optima.
 """
 function solvePACE_Manopt(prob, y, weights, lam=0.)
     SO3 = Manifolds.Rotations(3)
+
+    if sum(weights .!= 0) <= prob.K
+        lam = 0.1
+    end
 
     model = Model()
     @variable(model, R[1:3,1:3] in SO3)
@@ -287,6 +295,10 @@ function solvePACE_SCF(prob, y, weights, lam=0.; grid=100, local_iters=100, glob
     ## SETUP
     K = prob.K
     N = prob.N
+
+    if sum(weights .!= 0) <= prob.K
+        lam = 0.1
+    end
 
     ## eliminate position
     ybar = sum(weights .* eachcol(y)) ./ sum(weights)
