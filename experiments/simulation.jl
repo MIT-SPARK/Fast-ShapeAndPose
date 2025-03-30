@@ -251,7 +251,7 @@ function Ω2(q)
 end
 
 # set grid = 1 to local solve only
-function solvePACE_scf(prob, y, weights, lam=0.; grid=100)
+function solvePACE_scf(prob, y, weights, lam=0.; grid=100, compareobj=false)
     ## SETUP
     K = prob.K
     N = prob.N
@@ -341,6 +341,15 @@ function solvePACE_scf(prob, y, weights, lam=0.; grid=100)
                 new = true
                 break
             end
+
+            if compareobj
+                if abs(obj(q_new)) - obj(q_scf) < 0.05
+                    q_scf = q_new
+                    new = true
+                    break
+                end
+            end
+
             q_scf = q_new
         end
         return q_scf, new
@@ -382,7 +391,7 @@ end
 function simulate(; σm = 0.1, repeats = 1)
 
     gaps = zeros(repeats)
-    R_errs = zeros(repeats,3)
+    R_errs = zeros(repeats,4)
     p_errs = zeros(repeats,3)
     c_errs = zeros(repeats,3)
     objs = zeros(repeats,3)
@@ -399,11 +408,13 @@ function simulate(; σm = 0.1, repeats = 1)
         soln_tssos, gap_tssos, obj_tssos = solvePACE_TSSOS(prob, y, weights, lam)
         soln_manopt, obj_manopt = solvePACE_Manopt(prob, y, weights, lam)
         soln_scf, ℒ, obj_scf = solvePACE_scf(prob, y, weights, lam; grid=100) #(gap_tssos > 1e-5))
+        soln_scf2, ℒ2, obj_scf2 = solvePACE_scf(prob, y, weights, lam; grid=100, compareobj=true)
 
         # Compute Errors
         _, R_err_tssos = rotm2axang(gt.R'*soln_tssos.R); R_err_tssos *= 180/π
         _, R_err_manopt = rotm2axang(gt.R'*soln_manopt.R); R_err_manopt *= 180/π
         _, R_err_scf = rotm2axang(gt.R'*soln_scf.R); R_err_scf *= 180/π
+        _, R_err_scf2 = rotm2axang(gt.R'*soln_scf2.R); R_err_scf2 *= 180/π
 
         p_errs[i,1] = norm(soln_tssos.p - gt.p)
         p_errs[i,2] = norm(soln_manopt.p - gt.p)
@@ -422,6 +433,7 @@ function simulate(; σm = 0.1, repeats = 1)
         R_errs[i,1] = R_err_tssos
         R_errs[i,2] = R_err_manopt
         R_errs[i,3] = R_err_scf
+        R_errs[i,4] = R_err_scf2
         objs[i,1] = obj_tssos
         objs[i,2] = obj_manopt
         objs[i,3] = obj_scf
