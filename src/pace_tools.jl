@@ -83,7 +83,7 @@ function solvePACE_TSSOS(prob, y, weights, lam=0.)
     vars = vec(R)
 
     if sum(weights .!= 0) <= prob.K
-        lam = 0.1
+        lam = 0.01
     end
 
     # symbolic expressions for c, p
@@ -171,7 +171,7 @@ function solvePACE_Manopt(prob, y, weights, lam=0.)
     SO3 = Manifolds.Rotations(3)
 
     if sum(weights .!= 0) <= prob.K
-        lam = 0.1
+        lam = 0.01
     end
 
     model = Model()
@@ -409,6 +409,15 @@ function solvePACE_SCF(prob, y, weights, lam=0.; grid=100, local_iters=100, glob
             push!(q_scfs, q_scf)
             push!(q_logs, q_log)
         end
+    end
+    if length(q_scfs) == 0
+        printstyled("SCF Failed.\n", color=:red)
+        soln = Solution(zeros(prob.K,1), zeros(3,1), zeros(3,3))
+        obj_val = 1e6
+        if logs
+            return soln, obj_val, q_logs, ℒ, obj
+        end
+        return soln, obj_val
     end
 
     objs = obj.(q_scfs)

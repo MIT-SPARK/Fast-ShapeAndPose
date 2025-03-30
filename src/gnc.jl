@@ -10,22 +10,28 @@ where `residuals` are squared residuals for each input, size `prob.N`.
 Runs up to cost diff `stopthresh` or `maxiterations`. Update `μ->μUpdate*μ`.
 Use outlier rejection threshold `cbar2`.
 """
-function gnc(prob, y, solver; maxiterations=100, stopthresh=1e-6, μUpdate=1.4, cbar2=1.0)
+function gnc(prob, y, solver; maxiterations=100, stopthresh=1e-6, μUpdate=1.4, cbar2=1.0, debug=false)
     weights = ones(prob.N)
     last_weights = weights
     last_cost = 1e6
     Δcost = 1e6
     soln = nothing
+    success = false
     μ = 0.05
 
     for iter in 1:maxiterations
         # termination conditions
         if Δcost < stopthresh
-            @printf "GNC converged %3.2e < %3.2e.\n" Δcost stopthresh
+            if debug
+                @printf "GNC converged %3.2e < %3.2e.\n" Δcost stopthresh
+            end
+            success = true
             break
         end
         if maximum(abs.(weights)) < 1e-6
-            println("GNC encounters numerical issues.")
+            if debug
+                printstyled("GNC encounters numerical issues.\n", color=:red)
+            end
             break
         end
 
@@ -52,11 +58,13 @@ function gnc(prob, y, solver; maxiterations=100, stopthresh=1e-6, μUpdate=1.4, 
         # update μ
         μ = μ*μUpdate
 
-        # @printf "%3d | cost: %.2e, weights: %.2f\n" iter cost sum(weights)
+        if debug
+            @printf "%3d | cost: %.2e, weights: %.2f\n" iter cost sum(last_weights)
+        end
     end
 
     # return inliers + solution
-    inliers = collect(1:prob.N)[weights .> 1e-6]
-    return soln, inliers
+    inliers = collect(1:prob.N)[last_weights .> 1e-6]
+    return soln, inliers, success
 
 end
