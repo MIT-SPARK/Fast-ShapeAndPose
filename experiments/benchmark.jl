@@ -9,9 +9,9 @@ include("../src/pace_tools.jl")
 using BenchmarkTools
 
 function printresults(errors)
-    @printf "⋅ (%.3f, %.3f)\n" minimum(errors) maximum(errors)
-    @printf "⋅ Mean: %.3f\n" mean(errors)
-    @printf "⋅ Med.: %.3f\n" median(errors)
+    @printf " (%.3f, %.3f)\n" minimum(errors) maximum(errors)
+    @printf " Mean: %.3f\n" mean(errors)
+    @printf " Med.: %.3f\n" median(errors)
 end
 
 """
@@ -55,7 +55,7 @@ printresults(errors_global)
 
 printstyled("SCF Obj Termination\n", underline=true)
 errors_obj = []
-bm_obj = @benchmark wrapper!($errors_obj, $solvePACE_SCF, data...; global_iters=1, objthresh=1e-5) setup=(data=setup(σm))
+bm_obj = @benchmark wrapper!($errors_obj, $solvePACE_SCF, data...; global_iters=1, obj_thresh=1e-2) setup=(data=setup(σm))
 printresults(errors_obj)
 
 printstyled("Power Method Local\n", underline=true)

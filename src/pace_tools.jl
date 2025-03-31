@@ -279,152 +279,6 @@ function Ω2(q)
      q[4]  q[3] -q[2]  q[1]]
 end
 
-"""
-    solvePACE_SCF(prob, y, weights[, lam=0.; grid=100, local_iters=100, global_iters=15])
-
-Solve shape & pose estimation problem `prob` given measurements `y`
-with weight `weights`. Nonzero `lam` needed if more shapes than keypoints.
-
-Hyper-fast local solutions with initial guess. `local_iters` controls 
-max iterations to look for local solution.
-
-For global solutions, `grid` discretizes the space and `global_iters` 
-dictates how many initial conditions to try.
-"""
-function solvePACE_SCF(prob, y, weights, lam=0.; grid=100, local_iters=100, global_iters=15, logs=false, all_logs=false, objthresh=0.)
-    ## SETUP
-    K = prob.K
-    N = prob.N
-
-    if sum(weights .!= 0) <= prob.K
-        lam = 0.1
-    end
-
-    ## eliminate position
-    ybar = sum(weights .* eachcol(y)) ./ sum(weights)
-    Bbar = sum(weights .* eachslice(prob.B,dims=2)) ./ sum(weights)
-
-    ## eliminate shape
-    Bc = (eachslice(prob.B,dims=2) .- [Bbar]).*sqrt.(weights)
-    yc = reduce(hcat, (eachcol(y) .- [ybar]).*sqrt.(weights))
-    Bc2 = sum([Bc[i]'*Bc[i] for i = 1:N])
-    A = 2*(Bc2 + lam*I)
-    invA = inv(A)
-    # Schur complement
-    c1 = 2*(invA - invA*ones(K)*inv(ones(K)'*invA*ones(K))*ones(K)'*invA)
-    c2 = invA*ones(K)*inv(ones(K)'*invA*ones(K))
-
-    ## Lagrangian terms
-    # constant
-    L = sum([yc[:,i]'*yc[:,i] for i = 1:N])
-    L += c2'*Bc2*c2
-    L += lam*(c2'*c2)
-    # quadratic in q
-    if lam > 0
-        L123 = 4*sum([Ω1(yc[:,i])*Ω2(Bc[i]*(I-lam*c1-c1*Bc2)*c2) for i = 1:N])
-    else
-        L123 = 4*sum([Ω1(yc[:,i])*Ω2(Bc[i]*c2) for i = 1:N])
-    end
-    # quartic in q
-    function Lquartic(q)
-        R = quat2rotm(q)
-        Bry = sum([Bc[j]'*R'*yc[:,j] for j = 1:N])
-        return 4*sum([Ω1(yc[:,i])*Ω2(Bc[i]*c1*(2*I-Bc2*c1-lam*c1)*Bry) for i = 1:N])
-    end
-
-    # objective
-    obj(q) = q'*(1/2*(L123) + 1/4*Lquartic(q))*q + L
-    # Lagrangian
-    ℒ(q) = L123 + Lquartic(q)
-    
-    ## SOLVE
-    # self-consistent field iteration function
-    function scf(q_scf; quat_log=nothing)
-        new = false
-        log = [q_scf]
-        for _ = 1:Int(local_iters)
-            mat = ℒ(q_scf)
-            q_new = eigvecs(mat)[:,1]
-            normalize!(q_new)
-            push!(log, q_new)
-    
-            if !isnothing(quat_log) && !all_logs
-                doublebreak = false
-                for quat in quat_log
-                    if abs(abs(q_new'*quat) - 1) < 1e-5
-                        doublebreak = true
-                        break
-                    end
-                end
-                if doublebreak
-                    break
-                end
-            end
-    
-            if abs(abs(q_scf'*q_new) - 1) < 1e-6
-                q_scf = q_new
-                new = true
-                break
-            end
-
-            if objthresh != 0.
-                if abs(obj(q_new) - obj(q_scf)) < objthresh
-                    q_scf = q_new
-                    new = true
-                    break
-                end
-            end
-            q_scf = q_new
-        end
-        return q_scf, new, log
-    end
-
-    # solve to optimality
-    q_guess = normalize.(eachcol(randn(4, grid)))
-    dists = 100*ones(grid)
-
-    # Repeat and do farthest point sampling
-    # TODO: can accelerate this
-    q_scfs = []
-    q_logs = []
-    for idx = 1:min(grid, global_iters)
-        q0_new = q_guess[argmax(dists)]
-        dists = min.(dists, norm.(q_guess .- [q0_new]))
-        
-        q_scf, new, q_log = scf(q0_new; quat_log=q_scfs)
-        if new
-            push!(q_scfs, q_scf)
-            push!(q_logs, q_log)
-        end
-    end
-    if length(q_scfs) == 0
-        printstyled("SCF Failed.\n", color=:red)
-        soln = Solution(zeros(prob.K,1), zeros(3,1), zeros(3,3))
-        obj_val = 1e6
-        if logs
-            return soln, obj_val, q_logs, ℒ, obj
-        end
-        return soln, obj_val
-    end
-
-    objs = obj.(q_scfs)
-    minidx = argmin(objs)
-    q_scf = q_scfs[minidx]
-    obj_val = objs[minidx]
-
-    # convert to solution
-    R_est = quat2rotm(q_scf)
-    c_est = reshape(c1*sum([Bc[i]'*R_est'*yc[:,i] for i = 1:prob.N]) + c2,prob.K,1)
-    p_est = ybar - R_est*Bbar*c_est
-
-    soln = Solution(c_est, p_est, R_est)
-
-    if logs
-        return soln, obj_val, q_logs, ℒ, obj
-    end
-    return soln, obj_val
-end
-
 
 """
     solvePACE_SCF(prob, y, weights[...])
@@ -443,7 +297,7 @@ Hyper-fast local solutions with initial guess, can rerun for global solution.
 - `debug`: return logs of all distinct minima and objective function.
 - `all_logs`: return full logs of all runs.
 """
-function solvePACE_SCF2(prob::Problem, y, weights, lam=0.; 
+function solvePACE_SCF(prob::Problem, y, weights, lam=0.; 
         local_iters=100, obj_thresh=0., q0=nothing,
         global_iters=15,
         debug=false, all_logs=false)
@@ -541,7 +395,7 @@ function solvePACE_SCF2(prob::Problem, y, weights, lam=0.;
     dists = 100*ones(grid_pts)
     # add initial guess
     if !isnothing(q0)
-        prepend!(q_guess, normalize(q0))
+        prepend!(q_guess, [normalize(q0)])
         prepend!(dists, 101)
     end
 
@@ -723,6 +577,143 @@ function solvePACE_Power(prob, y, weights, lam=0.; q0=nothing, grid=100, local_i
 
     # convert to solution
     R_est = quat2rotm(q_power)
+    c_est = reshape(c1*sum([Bc[i]'*R_est'*yc[:,i] for i = 1:prob.N]) + c2,prob.K,1)
+    p_est = ybar - R_est*Bbar*c_est
+
+    soln = Solution(c_est, p_est, R_est)
+
+    if logs
+        return soln, obj_val, q_logs, ℒ, obj
+    end
+    return soln, obj_val
+end
+
+"""
+Old version of solvePACE_SCF, kept currently for debugging.
+"""
+function solvePACE_SCF_OLD(prob, y, weights, lam=0.; grid=100, local_iters=100, global_iters=15, logs=false, all_logs=false, objthresh=0.)
+    ## SETUP
+    K = prob.K
+    N = prob.N
+
+    if sum(weights .!= 0) <= prob.K
+        lam = 0.1
+    end
+
+    ## eliminate position
+    ybar = sum(weights .* eachcol(y)) ./ sum(weights)
+    Bbar = sum(weights .* eachslice(prob.B,dims=2)) ./ sum(weights)
+
+    ## eliminate shape
+    Bc = (eachslice(prob.B,dims=2) .- [Bbar]).*sqrt.(weights)
+    yc = reduce(hcat, (eachcol(y) .- [ybar]).*sqrt.(weights))
+    Bc2 = sum([Bc[i]'*Bc[i] for i = 1:N])
+    A = 2*(Bc2 + lam*I)
+    invA = inv(A)
+    # Schur complement
+    c1 = 2*(invA - invA*ones(K)*inv(ones(K)'*invA*ones(K))*ones(K)'*invA)
+    c2 = invA*ones(K)*inv(ones(K)'*invA*ones(K))
+
+    ## Lagrangian terms
+    # constant
+    L = sum([yc[:,i]'*yc[:,i] for i = 1:N])
+    L += c2'*Bc2*c2
+    L += lam*(c2'*c2)
+    # quadratic in q
+    if lam > 0
+        L123 = 4*sum([Ω1(yc[:,i])*Ω2(Bc[i]*(I-lam*c1-c1*Bc2)*c2) for i = 1:N])
+    else
+        L123 = 4*sum([Ω1(yc[:,i])*Ω2(Bc[i]*c2) for i = 1:N])
+    end
+    # quartic in q
+    function Lquartic(q)
+        R = quat2rotm(q)
+        Bry = sum([Bc[j]'*R'*yc[:,j] for j = 1:N])
+        return 4*sum([Ω1(yc[:,i])*Ω2(Bc[i]*c1*(2*I-Bc2*c1-lam*c1)*Bry) for i = 1:N])
+    end
+
+    # objective
+    obj(q) = q'*(1/2*(L123) + 1/4*Lquartic(q))*q + L
+    # Lagrangian
+    ℒ(q) = L123 + Lquartic(q)
+    
+    ## SOLVE
+    # self-consistent field iteration function
+    function scf(q_scf; quat_log=nothing)
+        new = false
+        log = [q_scf]
+        for _ = 1:Int(local_iters)
+            mat = ℒ(q_scf)
+            q_new = eigvecs(mat)[:,1]
+            normalize!(q_new)
+            push!(log, q_new)
+    
+            if !isnothing(quat_log) && !all_logs
+                doublebreak = false
+                for quat in quat_log
+                    if abs(abs(q_new'*quat) - 1) < 1e-5
+                        doublebreak = true
+                        break
+                    end
+                end
+                if doublebreak
+                    break
+                end
+            end
+    
+            if abs(abs(q_scf'*q_new) - 1) < 1e-6
+                q_scf = q_new
+                new = true
+                break
+            end
+
+            if objthresh != 0.
+                if abs(obj(q_new) - obj(q_scf)) < objthresh
+                    q_scf = q_new
+                    new = true
+                    break
+                end
+            end
+            q_scf = q_new
+        end
+        return q_scf, new, log
+    end
+
+    # solve to optimality
+    q_guess = normalize.(eachcol(randn(4, grid)))
+    dists = 100*ones(grid)
+
+    # Repeat and do farthest point sampling
+    # TODO: can accelerate this
+    q_scfs = []
+    q_logs = []
+    for idx = 1:min(grid, global_iters)
+        q0_new = q_guess[argmax(dists)]
+        dists = min.(dists, norm.(q_guess .- [q0_new]))
+        
+        q_scf, new, q_log = scf(q0_new; quat_log=q_scfs)
+        if new
+            push!(q_scfs, q_scf)
+            push!(q_logs, q_log)
+        end
+    end
+    if length(q_scfs) == 0
+        printstyled("SCF Failed.\n", color=:red)
+        soln = Solution(zeros(prob.K,1), zeros(3,1), zeros(3,3))
+        obj_val = 1e6
+        if logs
+            return soln, obj_val, q_logs, ℒ, obj
+        end
+        return soln, obj_val
+    end
+
+    objs = obj.(q_scfs)
+    minidx = argmin(objs)
+    q_scf = q_scfs[minidx]
+    obj_val = objs[minidx]
+
+    # convert to solution
+    R_est = quat2rotm(q_scf)
     c_est = reshape(c1*sum([Bc[i]'*R_est'*yc[:,i] for i = 1:prob.N]) + c2,prob.K,1)
     p_est = ybar - R_est*Bbar*c_est
 

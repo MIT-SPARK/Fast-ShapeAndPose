@@ -26,7 +26,7 @@ lam = 0.0
 weights = ones(prob.N)
 
 # solve with logs
-soln, obj_val, q_logs, ℒ, obj = solvePACE_SCF(prob, y, weights, lam; global_iters=15, logs=true)
+soln, obj_val, q_logs, ℒ, obj = solvePACE_SCF(prob, y, weights, lam; global_iters=15, debug=true)
 
 # 1) plot eigvals, objective vals
 begin
@@ -85,7 +85,7 @@ end
 
 # 4) plot ALL trajectories
 # begin
-#     soln, obj_val, full_q_logs, ℒ, obj = solvePACE_SCF(prob, y, weights, lam; grid=1000, global_iters=1000, logs=true, all_logs=true)
+#     soln, obj_val, full_q_logs, ℒ, obj = solvePACE_SCF(prob, y, weights, lam; global_iters=1000, debug=true, all_logs=true)
 
 #     q_proj_gt = proj_quat(rotm2quat(gt.R))
 
