@@ -320,43 +320,22 @@ function solvePACE_SCF(prob, y, weights, lam=0.; grid=100, local_iters=100, glob
     L += c2'*Bc2*c2
     L += lam*(c2'*c2)
     # quadratic in q
-    L1 = zeros(4,4)
-    L2 = zeros(4,4)
-    L3 = zeros(4,4)
-    for i = 1:N
-        L1 += -2*Ω1(yc[:,i])'*Ω2(Bc[i]*c2)
-        if lam > 0.
-            L3 +=  2*lam*Ω1(yc[:,i])'*Ω2(Bc[i]*c1'*c2)
-            L2 +=  2*Ω1(yc[:,i])'*Ω2(Bc[i]*c1'*Bc2*c2) # (c1'*Bc2*c2 = 0 if lam=0)
-        end
+    if lam > 0
+        L123 = 4*sum([Ω1(yc[:,i])*Ω2(Bc[i]*(I-lam*c1-c1*Bc2)*c2) for i = 1:N])
+    else
+        L123 = 4*sum([Ω1(yc[:,i])*Ω2(Bc[i]*c2) for i = 1:N])
     end
-    L1 += L1'
-    L2 += L2'
-    L3 += L3'
     # quartic in q
     function Lquartic(q)
-        L4 = zeros(4,4)
-        L5 = zeros(4,4)
-        L6 = zeros(4,4)
         R = quat2rotm(q)
         Bry = sum([Bc[j]'*R'*yc[:,j] for j = 1:N])
-        for i = 1:N
-            if lam > 0.
-                L4 += 2*lam*Ω1(yc[:,i])'*Ω2(Bc[i]*c1'*c1*Bry)
-            end
-            L5 += -2*Ω1(yc[:,i])'*Ω2(Bc[i]*(c1+c1')*Bry)
-            L6 += 2*Ω1(yc[:,i])'*Ω2(Bc[i]*c1'*Bc2'*c1*Bry)
-        end
-        L4 += L4'
-        L5 += L5'
-        L6 += L6'
-        return L4 + L5 + L6
+        return 4*sum([Ω1(yc[:,i])*Ω2(Bc[i]*c1*(2*I-Bc2*c1-lam*c1)*Bry) for i = 1:N])
     end
 
     # objective
-    obj(q) = q'*(1/2*(L1 + L2 + L3) + 1/4*Lquartic(q))*q + L
+    obj(q) = q'*(1/2*(L123) + 1/4*Lquartic(q))*q + L
     # Lagrangian
-    ℒ(q) = L1 + L2 + L3 + Lquartic(q)
+    ℒ(q) = L123 + Lquartic(q)
     
     ## SOLVE
     # self-consistent field iteration function
