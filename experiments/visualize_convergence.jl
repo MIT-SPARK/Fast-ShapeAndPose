@@ -28,12 +28,6 @@ weights = ones(prob.N)
 # solve with logs
 soln, obj_val, q_logs, ℒ, obj = solvePACE_SCF(prob, y, weights, lam; global_iters=15, logs=true)
 
-function calc_error(q)
-    global gt
-    
-
-end
-
 # 1) plot eigvals, objective vals
 begin
     λs = reduce(hcat,eigvals.(ℒ.(q_logs[1])))[1,:]
