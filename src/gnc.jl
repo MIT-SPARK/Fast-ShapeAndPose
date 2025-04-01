@@ -60,6 +60,8 @@ function gnc(prob, y, solver; maxiterations=100, stopthresh=1e-6, μUpdate=1.4, 
 
         if debug
             @printf "%3d | cost: %.2e, weights: %.2f\n" iter cost sum(last_weights)
+            println(residuals)
+            println(weights)
         end
     end
 

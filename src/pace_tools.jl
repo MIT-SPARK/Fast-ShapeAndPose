@@ -119,7 +119,7 @@ function solvePACE_TSSOS(prob, y, weights, lam=0.)
     obj = lam*(c - cbar)'*(c - cbar)
     for i = 1:prob.N
         term = R'*(y[:,i] - yw) - (B[1+3*(i-1):3*i,:] - Bw)*c
-        obj += term' * term
+        obj += weights[i] * (term' * term)
     end
     # remove "matrix" polynomial
     obj = obj[1]
@@ -167,7 +167,7 @@ with weight `weights`. Nonzero `lam` needed if more shapes than keypoints.
 
 Fast local solutions from initial guess `R0`, but no guarantee of global optima.
 """
-function solvePACE_Manopt(prob, y, weights, lam=0.; R0=diagm(ones(3)))
+function solvePACE_Manopt(prob, y, weights, lam=0.; R0=nothing)
     SO3 = Manifolds.Rotations(3)
 
     if sum(weights .!= 0) <= prob.K
@@ -176,6 +176,7 @@ function solvePACE_Manopt(prob, y, weights, lam=0.; R0=diagm(ones(3)))
 
     model = Model()
     @variable(model, R[1:3,1:3] in SO3)
+    if isnothing(R0) R0 = randrotation() end
     set_start_value.(R, R0)
     set_optimizer(model, Manopt.JuMP_Optimizer)
 
@@ -212,7 +213,7 @@ function solvePACE_Manopt(prob, y, weights, lam=0.; R0=diagm(ones(3)))
     obj = lam*(c - cbar)'*(c - cbar)
     for i = 1:prob.N
         term = R'*(y[:,i] - yw) - (B[1+3*(i-1):3*i,:] - Bw)*c
-        obj += term' * term
+        obj += weights[i] * (term' * term)
     end
     # remove "matrix" polynomial
     obj = obj[1]
@@ -344,7 +345,7 @@ function solvePACE_SCF(prob::Problem, y, weights, lam=0.;
     # objective
     obj(q) = q'*(1/2*(L123) + 1/4*Lquartic(q))*q + L
     # Lagrangian
-    ℒ(q) = L123 + Lquartic(q)
+    ℒ(q) = Symmetric(L123 + Lquartic(q))
     
     ## SOLVE
     # self-consistent field iteration function
@@ -415,8 +416,11 @@ function solvePACE_SCF(prob::Problem, y, weights, lam=0.;
     end
     if length(q_scfs) == 0
         printstyled("SCF Failed.\n", color=:red)
-        soln = Solution(zeros(prob.K,1), zeros(3,1), zeros(3,3))
-        obj_val = 1e6
+        R_est = quat2rotm(normalize(randn(4)))
+        c_est = reshape(c1*sum([Bc[i]'*R_est'*yc[:,i] for i = 1:prob.N]) + c2,prob.K,1)
+        p_est = ybar - R_est*Bbar*c_est
+        soln = Solution(c_est, p_est, R_est)
+        obj_val = obj(rotm2quat(R_est))
         if debug || all_logs
             return soln, obj_val, q_logs, ℒ, obj
         end
@@ -620,22 +624,43 @@ function solvePACE_SCF_OLD(prob, y, weights, lam=0.; grid=100, local_iters=100, 
     L += c2'*Bc2*c2
     L += lam*(c2'*c2)
     # quadratic in q
-    if lam > 0
-        L123 = 4*sum([Ω1(yc[:,i])*Ω2(Bc[i]*(I-lam*c1-c1*Bc2)*c2) for i = 1:N])
-    else
-        L123 = 4*sum([Ω1(yc[:,i])*Ω2(Bc[i]*c2) for i = 1:N])
+    L1 = zeros(4,4)
+    L2 = zeros(4,4)
+    L3 = zeros(4,4)
+    for i = 1:N
+        L1 += -2*Ω1(yc[:,i])'*Ω2(Bc[i]*c2)
+        if lam > 0.
+            L3 +=  2*lam*Ω1(yc[:,i])'*Ω2(Bc[i]*c1'*c2)
+            L2 +=  2*Ω1(yc[:,i])'*Ω2(Bc[i]*c1'*Bc2*c2) # (c1'*Bc2*c2 = 0 if lam=0)
+        end
     end
+    L1 += L1'
+    L2 += L2'
+    L3 += L3'
     # quartic in q
     function Lquartic(q)
+        L4 = zeros(4,4)
+        L5 = zeros(4,4)
+        L6 = zeros(4,4)
         R = quat2rotm(q)
         Bry = sum([Bc[j]'*R'*yc[:,j] for j = 1:N])
-        return 4*sum([Ω1(yc[:,i])*Ω2(Bc[i]*c1*(2*I-Bc2*c1-lam*c1)*Bry) for i = 1:N])
+        for i = 1:N
+            if lam > 0.
+                L4 += 2*lam*Ω1(yc[:,i])'*Ω2(Bc[i]*c1'*c1*Bry)
+            end
+            L5 += -2*Ω1(yc[:,i])'*Ω2(Bc[i]*(c1+c1')*Bry)
+            L6 += 2*Ω1(yc[:,i])'*Ω2(Bc[i]*c1'*Bc2'*c1*Bry)
+        end
+        L4 += L4'
+        L5 += L5'
+        L6 += L6'
+        return L4 + L5 + L6
     end
 
     # objective
-    obj(q) = q'*(1/2*(L123) + 1/4*Lquartic(q))*q + L
+    obj(q) = q'*(1/2*(L1 + L2 + L3) + 1/4*Lquartic(q))*q + L
     # Lagrangian
-    ℒ(q) = L123 + Lquartic(q)
+    ℒ(q) = Symmetric(L1 +L2 + L3 + Lquartic(q))
     
     ## SOLVE
     # self-consistent field iteration function
@@ -699,8 +724,11 @@ function solvePACE_SCF_OLD(prob, y, weights, lam=0.; grid=100, local_iters=100, 
     end
     if length(q_scfs) == 0
         printstyled("SCF Failed.\n", color=:red)
-        soln = Solution(zeros(prob.K,1), zeros(3,1), zeros(3,3))
-        obj_val = 1e6
+        R_est = quat2rotm(normalize(randn(4)))
+        c_est = reshape(c1*sum([Bc[i]'*R_est'*yc[:,i] for i = 1:prob.N]) + c2,prob.K,1)
+        p_est = ybar - R_est*Bbar*c_est
+        soln = Solution(c_est, p_est, R_est)
+        obj_val = obj(rotm2quat(R_est))
         if logs
             return soln, obj_val, q_logs, ℒ, obj
         end

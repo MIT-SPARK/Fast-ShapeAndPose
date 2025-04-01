@@ -4,15 +4,25 @@
 include("../src/pace_tools.jl")
 
 # generate problem
-Random.seed!(14)
+# Random.seed!(14)
 
 two = 0
 mismatched = 0
 
 for i = 1:1000
     global two, mismatched
-    prob, gt, y = genproblem(σm=1.)
-    lam = 0.0
+    # prob, gt, y = genproblem(σm=1.)
+    # lam = 0.0
+    # weights = ones(prob.N)
+
+    prob_old, gt, y_old = genproblem(N=5, K=2, σm=0.0)
+    lam = 0.01
+    # add bad associations
+    B_new = repeat(prob_old.B, inner=[1,prob_old.N,1])
+    B_new = B_new[:,[1;3:end],:]
+    y = repeat(y_old, 1, prob_old.N)
+    y = y[:,[1;3:end]]
+    prob = Problem(prob_old.N^2-1, prob_old.K, prob_old.σm, prob_old.r, B_new)
     weights = ones(prob.N)
 
     q0 = normalize(randn(4))
@@ -23,7 +33,7 @@ for i = 1:1000
     # solve via Manopt
     soln_manopt, obj_manopt = solvePACE_Manopt(prob, y, weights, lam; R0=quat2rotm(q0))
 
-    q_scf = rotm2quat(soln.R)
+    q_scf = q_logs[1][end]
     q_man = rotm2quat(soln_manopt.R)
 
     if length(q_logs) > 1
