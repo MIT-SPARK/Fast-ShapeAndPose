@@ -15,7 +15,7 @@ function proj_quat(q)
 end
 
 # setup
-Random.seed!(3) 
+Random.seed!(14) 
 # 2x seeds: 7, 8, 14, 20, 24, 27, 31, 32, 41, 46, 54, 56, 60, 67, 78, 84, 85
 # 3x seeds: 172, 259
 σm = 1.0
@@ -27,6 +27,8 @@ weights = ones(prob.N)
 
 # solve with logs
 soln, obj_val, q_logs, ℒ, obj = solvePACE_SCF(prob, y, weights, lam; global_iters=15, debug=true)
+
+println("Found $(length(q_logs)) solution(s).")
 
 # 1) plot eigvals, objective vals
 begin
