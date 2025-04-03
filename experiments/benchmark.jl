@@ -9,6 +9,7 @@ include("../src/pace_tools.jl")
 using BenchmarkTools
 
 function printresults(errors)
+    @printf " %d\n" length(errors)
     @printf " (%.3f, %.3f)\n" minimum(errors) maximum(errors)
     @printf " Mean: %.3f\n" mean(errors)
     @printf " Med.: %.3f\n" median(errors)
@@ -43,32 +44,33 @@ end
 ## Run benchmarks!
 σm = 0.1
 
-printstyled("SCF Local\n", underline=true)
+printstyled("SCF Local", underline=true)
 errors_local = []
 bm_local = @benchmark wrapper!($errors_local, $solvePACE_SCF, data...; global_iters=1) setup=(data=setup(σm))
 printresults(errors_local)
 
-printstyled("SCF Global\n", underline=true)
+printstyled("SCF Global", underline=true)
 errors_global = []
 bm_global = @benchmark wrapper!($errors_global, $solvePACE_SCF, data...; global_iters=15) setup=(data=setup(σm))
 printresults(errors_global)
 
-printstyled("SCF Obj Termination\n", underline=true)
+printstyled("SCF Obj Termination", underline=true)
 errors_obj = []
 bm_obj = @benchmark wrapper!($errors_obj, $solvePACE_SCF, data...; global_iters=1, obj_thresh=1e-2) setup=(data=setup(σm))
 printresults(errors_obj)
+# computing the objective is computationally expensive, making this slower
 
-printstyled("Power Method Local\n", underline=true)
+printstyled("Power Method Local", underline=true)
 errors_power = []
 bm_power = @benchmark wrapper!($errors_power, $solvePACE_Power, data...; global_iters=1) setup=(data=setup(σm))
 printresults(errors_power)
 
-printstyled("TSSOS\n", underline=true)
+printstyled("TSSOS", underline=true)
 errors_tssos = []
 bm_tssos = @benchmark wrapper!($errors_tssos, $solvePACE_TSSOS, data...) setup=(data=setup(σm))
 printresults(errors_tssos)
 
-printstyled("Manopt\n", underline=true)
+printstyled("Manopt", underline=true)
 errors_manopt = []
 bm_manopt = @benchmark wrapper!($errors_manopt, $solvePACE_Manopt, data...) setup=(data=setup(σm))
 printresults(errors_manopt)

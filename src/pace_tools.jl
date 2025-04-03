@@ -352,6 +352,7 @@ function solvePACE_SCF(prob::Problem, y, weights, lam=0.;
     function scf(q_scf; quat_log=nothing)
         new = false
         log = [q_scf]
+        obj_last = 1e6
         for _ = 1:Int(local_iters)
             mat = ℒ(q_scf)
             q_new = eigvecs(mat)[:,1]
@@ -378,11 +379,13 @@ function solvePACE_SCF(prob::Problem, y, weights, lam=0.;
             end
 
             if obj_thresh != 0.
-                if abs(obj(q_new) - obj(q_scf)) < obj_thresh
+                obj_new = obj(q_new)
+                if abs(obj_new - obj_last) < obj_thresh
                     q_scf = q_new
                     new = true
                     break
                 end
+                obj_last = obj_new
             end
             q_scf = q_new
         end
@@ -406,8 +409,10 @@ function solvePACE_SCF(prob::Problem, y, weights, lam=0.;
     q_logs = []
     for idx = 1:global_iters
         q0_new = q_guess[argmax(dists)]
-        dists = min.(dists, norm.(q_guess .- [q0_new]))
-        
+        # angular distance farther point sampling
+        sines(qs, q) = [1. .- qs[i]'*q for i = 1:grid_pts] # TODO: this can be more efficient
+        dists = min.(dists, sines(q_guess, q0_new))
+        # dists = min.(dists, norm.(q_guess .- [q0_new]))
         q_scf, new, q_log = scf(q0_new; quat_log=q_scfs)
         if new
             push!(q_scfs, q_scf)
