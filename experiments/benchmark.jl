@@ -49,21 +49,31 @@ errors_local = []
 bm_local = @benchmark wrapper!($errors_local, $solvePACE_SCF, data...; global_iters=1) setup=(data=setup(σm))
 printresults(errors_local)
 
-printstyled("SCF Global", underline=true)
-errors_global = []
-bm_global = @benchmark wrapper!($errors_global, $solvePACE_SCF, data...; global_iters=15) setup=(data=setup(σm))
-printresults(errors_global)
+printstyled("Gauss-Newton Local", underline=true)
+errors_gn = []
+bm_gn = @benchmark wrapper!($errors_gn, $solvePACE_GN, data...) setup=(data=setup(σm))
+printresults(errors_gn)
 
-printstyled("SCF Obj Termination", underline=true)
-errors_obj = []
-bm_obj = @benchmark wrapper!($errors_obj, $solvePACE_SCF, data...; global_iters=1, obj_thresh=1e-2) setup=(data=setup(σm))
-printresults(errors_obj)
-# computing the objective is computationally expensive, making this slower
+printstyled("L-M Local", underline=true)
+errors_lm = []
+bm_lm = @benchmark wrapper!($errors_lm, $solvePACE_GN, data...; λ=0.1) setup=(data=setup(σm))
+printresults(errors_gn)
 
-printstyled("Power Method Local", underline=true)
-errors_power = []
-bm_power = @benchmark wrapper!($errors_power, $solvePACE_Power, data...; global_iters=1) setup=(data=setup(σm))
-printresults(errors_power)
+# printstyled("SCF Global", underline=true)
+# errors_global = []
+# bm_global = @benchmark wrapper!($errors_global, $solvePACE_SCF, data...; global_iters=15) setup=(data=setup(σm))
+# printresults(errors_global)
+
+# printstyled("SCF Obj Termination", underline=true)
+# errors_obj = []
+# bm_obj = @benchmark wrapper!($errors_obj, $solvePACE_SCF, data...; global_iters=1, obj_thresh=1e-2) setup=(data=setup(σm))
+# printresults(errors_obj)
+# # computing the objective is computationally expensive, making this slower
+
+# printstyled("Power Method Local", underline=true)
+# errors_power = []
+# bm_power = @benchmark wrapper!($errors_power, $solvePACE_Power, data...; global_iters=1) setup=(data=setup(σm))
+# printresults(errors_power)
 
 printstyled("TSSOS", underline=true)
 errors_tssos = []

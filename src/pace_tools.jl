@@ -757,3 +757,89 @@ function solvePACE_SCF_OLD(prob, y, weights, lam=0.; grid=100, local_iters=100, 
     end
     return soln, obj_val
 end
+
+
+### Gauss-Newton solver
+function skew(y)
+    [0. -y[3] y[2]; y[3] 0. -y[1]; -y[2] y[1] 0]
+end
+
+"""
+    solvePACE_GN(prob, y, weights[, lam=0.; R₀, λ = 0.])
+
+Solve shape & pose estimation problem `prob` given measurements `y`
+with weight `weights`. Nonzero `lam` needed if more shapes than keypoints.
+
+Gauss-Newton specialized to PACE. Set `linesearch=true` to use line search for
+best update and use `λ` to do Levenberg-Marquardt. This is a local solver starting at `R₀`.
+"""
+function solvePACE_GN(prob, y, weights, lam=0.; R₀=nothing, λ=0.)
+    # initial condition
+    if isnothing(R₀) R₀ = randrotation() end
+
+    if sum(weights .!= 0) <= prob.K
+        lam = 0.01
+    end
+
+    # symbolic expressions for c, p
+    ybar = sum(weights .* eachcol(y)) ./ sum(weights)
+    ytild = sqrt.(weights) .* eachcol(y .- ybar)
+    Bbar = sum(weights .* eachslice(prob.B,dims=2)) ./ sum(weights)
+    Btild = sqrt.(weights) .* (eachslice(prob.B,dims=2) .- [Bbar])
+    H11 = 2*lam*I + 2*sum([Btild[i]'*Btild[i] for i = 1:prob.N])
+    invH11 = inv(H11)
+    H12 = ones(prob.K,1)
+    invS = inv(-H12'*invH11*H12)
+    G = invH11 + invH11*H12*invS*H12'*invH11
+    g = -invH11*H12*invS
+
+    # optimal shape given rotation
+    cbar = 1/prob.K * ones(prob.K,1)
+    function c(R)
+        G*(2*lam*cbar + 2*sum([Btild[i]'*R'*ytild[i] for i = 1:prob.N])) + g
+    end
+    # optimal position given shape & rotation
+    p(R,c) = ybar - R*reshape(Bbar,3,prob.K)*c
+
+    # registration residual
+    ri(R, i) = R'*ytild[i] - Btild[i]*c(R)
+    # shape residual
+    rc(R) = √lam*(c(R) - cbar)
+
+    # TODO: fix Jacobians, residuals, and remove unnecessary vars
+
+    # Registration Jacobian
+    Ji(R, i) = R'*skew(ytild[i]) - 2*Btild[i]*G*sum([Btild[j]'*R'*skew(ytild[j]) for j = 1:prob.N])
+
+    # Shape jacobian
+    Jc(R) = 2*√lam*G*sum([Btild[i]'*R'*skew(ytild[i]) for i = 1:prob.N])
+
+    # G-N / L-M
+    R_cur = R₀
+    for i = 1:100
+        Σ = Jc(R_cur)'*Jc(R_cur) + sum([Ji(R_cur,i)'*Ji(R_cur,i) for i = 1:prob.N])
+        v = Jc(R_cur)'*rc(R_cur) + sum([Ji(R_cur,i)'*ri(R_cur,i) for i = 1:prob.N])
+        δθ = -inv(Σ + λ*I)*v
+        α  = 1.0
+        R_cur = exp(skew(α*δθ))*R_cur
+
+        # check for convergence
+        if norm(δθ) < 1e-3
+            # println("G-N Convergence.")
+            break
+        end
+    end
+
+    # obj
+    obj = rc(R_cur)'*rc(R_cur) + sum([ri(R_cur, i)'*ri(R_cur,i) for i = 1:prob.N])
+
+    # Convert to solution
+    R_est = R_cur
+    R_est = project2SO3(R_est)
+    c_est = c(R_est)
+    p_est = p(R_est, c_est)
+
+    soln = Solution(c_est, p_est, R_est)
+
+    return soln, value.(obj)
+end
