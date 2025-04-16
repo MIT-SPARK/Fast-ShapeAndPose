@@ -1,5 +1,7 @@
-## basic, unintimidating implementation of SCF
+## SCF for pnp
 # Lorenzo Shaikewitz, 4/4/2025
+
+include("../src/pnp_tools.jl")
 
 prob, gt, u = genPnPproblem(σm = 0., r=0.8)
 weights = ones(prob.N)

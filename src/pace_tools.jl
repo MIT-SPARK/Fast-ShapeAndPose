@@ -806,8 +806,6 @@ function solvePACE_GN(prob, y, weights, lam=0.; R₀=nothing, λ=0.)
     # shape residual
     rc(R) = √lam*(c(R) - cbar)
 
-    # TODO: fix Jacobians, residuals, and remove unnecessary vars
-
     # Registration Jacobian
     Ji(R, i) = R'*skew(ytild[i]) - 2*Btild[i]*G*sum([Btild[j]'*R'*skew(ytild[j]) for j = 1:prob.N])
 
