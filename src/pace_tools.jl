@@ -344,6 +344,7 @@ function solvePACE_SCF(prob::Problem, y, weights, lam=0.;
 
     # objective
     obj(q) = q'*(1/2*(L123) + 1/4*Lquartic(q))*q + L
+    obj(q, mat) = q'*(1/4*(L123) + 1/4*mat)*q + L
     # Lagrangian
     ℒ(q) = Symmetric(L123 + Lquartic(q))
     
@@ -353,8 +354,15 @@ function solvePACE_SCF(prob::Problem, y, weights, lam=0.;
         new = false
         log = [q_scf]
         obj_last = 1e6
+        if obj_thresh != 0
+            mat_last = ℒ(q_scf)
+        end
         for _ = 1:Int(local_iters)
-            mat = ℒ(q_scf)
+            if obj_thresh !=0
+                mat = mat_last
+            else
+                mat = ℒ(q_scf)
+            end
             q_new = eigvecs(mat)[:,1]
             normalize!(q_new)
             push!(log, q_new)
@@ -379,7 +387,8 @@ function solvePACE_SCF(prob::Problem, y, weights, lam=0.;
             end
 
             if obj_thresh != 0.
-                obj_new = obj(q_new)
+                mat_last = ℒ(q_new)
+                obj_new = obj(q_new, mat_last)
                 if abs(obj_new - obj_last) < obj_thresh
                     q_scf = q_new
                     new = true
@@ -429,6 +438,9 @@ function solvePACE_SCF(prob::Problem, y, weights, lam=0.;
         if debug || all_logs
             return soln, obj_val, q_logs, ℒ, obj
         end
+        if global_iters == 1
+            return soln, obj_val, local_iters
+        end
         return soln, obj_val
     end
 
@@ -446,6 +458,9 @@ function solvePACE_SCF(prob::Problem, y, weights, lam=0.;
 
     if debug || all_logs
         return soln, obj_val, q_logs, ℒ, obj
+    end
+    if global_iters == 1
+        return soln, obj_val, length(q_logs[1])
     end
     return soln, obj_val
 end
@@ -576,6 +591,9 @@ function solvePACE_Power(prob, y, weights, lam=0.; q0=nothing, grid=100, local_i
         if logs
             return soln, obj_val, q_logs, ℒ, obj
         end
+        if global_iters == 1
+            return soln, obj_val, local_iters
+        end
         return soln, obj_val
     end
 
@@ -593,6 +611,9 @@ function solvePACE_Power(prob, y, weights, lam=0.; q0=nothing, grid=100, local_i
 
     if logs
         return soln, obj_val, q_logs, ℒ, obj
+    end
+    if global_iters == 1
+        return soln, obj_val, length(q_logs[1])
     end
     return soln, obj_val
 end
