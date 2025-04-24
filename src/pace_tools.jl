@@ -354,11 +354,9 @@ function solvePACE_SCF(prob::Problem, y, weights, lam=0.;
         new = false
         log = [q_scf]
         obj_last = 1e6
-        if obj_thresh != 0
-            mat_last = ℒ(q_scf)
-        end
-        for _ = 1:Int(local_iters)
-            if obj_thresh !=0
+        mat_last = zeros(2,4) # to throw errors if improper
+        for iter = 1:Int(local_iters)
+            if obj_thresh !=0 && iter > 5
                 mat = mat_last
             else
                 mat = ℒ(q_scf)
@@ -386,7 +384,7 @@ function solvePACE_SCF(prob::Problem, y, weights, lam=0.;
                 break
             end
 
-            if obj_thresh != 0.
+            if obj_thresh != 0. && iter >= 5 # start early termination a little later
                 mat_last = ℒ(q_new)
                 obj_new = obj(q_new, mat_last)
                 if abs(obj_new - obj_last) < obj_thresh

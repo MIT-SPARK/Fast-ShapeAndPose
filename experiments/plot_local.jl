@@ -184,7 +184,7 @@ plot_violin2.series_list[3][:label] = all_labels[idx2]
 # K = 4, dot plot
 plot_dot1 = Plots.plot(ylabel = "Rotation Error (deg)", xlabel="Measurement Noise Scale", dpi=300)
 idx1 = 1
-idx2 = 6
+idx2 = 7
 for idxσ in [3,7,13,21,41]
     σm = σms[idxσ]
     dotplot!(string.(round.(ones(1001)*σm/r,digits=2)),all_errors[idx1][1][idxσ],side=:left,label=false,mc=1,msw=0,ms=1.2)#marker=(1, stroke(0)))
@@ -192,20 +192,20 @@ for idxσ in [3,7,13,21,41]
 end
 plot_dot1.series_list[1][:label] = all_labels[idx1]
 plot_dot1.series_list[2][:label] = all_labels[idx2]
-Plots.plot!(dpi=300, fontfamily="Helvetica", grid=false, title="Rotation Errors (K < N)")
+Plots.plot!(dpi=300, fontfamily="Helvetica", grid=false, title="Comparison with Global Solver")
 
 # K = 25, dot plot
 plot_dot2 = Plots.plot(ylabel = "Rotation Error (deg)", xlabel="Measurement Noise Scale", dpi=300)
 idx1 = 1
-idx2 = 6
+idx2 = 2
 for idxσ in [3,7,13,21,41]
     σm = σms[idxσ]
-    dotplot!(string.(round.(ones(1001)*σm/r,digits=2)),all_errors[idx1][2][idxσ],side=:left,label=false,mc=1,msw=0,ms=1.2)#marker=(1, stroke(0)))
-    dotplot!(string.(round.(ones(1001)*σm/r,digits=2)),all_errors[idx2][2][idxσ],side=:right,label=false,mc=2,msw=0,ms=1.2)#marker=(2, stroke(0)))
+    dotplot!(string.(round.(ones(1001)*σm/r,digits=2)),all_errors[idx1][1][idxσ],side=:left,label=false,mc=1,msw=0,ms=1.2)#marker=(1, stroke(0)))
+    dotplot!(string.(round.(ones(1001)*σm/r,digits=2)),all_errors[idx2][1][idxσ],side=:right,label=false,mc=3,msw=0,ms=1.2)#marker=(2, stroke(0)))
 end
 plot_dot2.series_list[1][:label] = all_labels[idx1]
 plot_dot2.series_list[2][:label] = all_labels[idx2]
-Plots.plot!(dpi=300, fontfamily="Helvetica", grid=false, legend=false,title="Rotation Errors (K > N)")
+Plots.plot!(dpi=300, fontfamily="Helvetica", grid=false,title="Objective Termination")
 
 # plot both together
 Plots.plot(plot_dot1,plot_dot2,size=(900,300), margin=8mm, framestyle=:box, legendcolumns=-1)
