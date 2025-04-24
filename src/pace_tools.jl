@@ -82,7 +82,7 @@ function solvePACE_TSSOS(prob, y, weights, lam=0.)
     @polyvar R[1:3,1:3]
     vars = vec(R)
 
-    if sum(weights .!= 0) <= prob.K
+    if sum(weights .!= 0) <= prob.K && lam == 0
         lam = 0.01
     end
 
@@ -170,7 +170,7 @@ Fast local solutions from initial guess `R0`, but no guarantee of global optima.
 function solvePACE_Manopt(prob, y, weights, lam=0.; R0=nothing)
     SO3 = Manifolds.Rotations(3)
 
-    if sum(weights .!= 0) <= prob.K
+    if sum(weights .!= 0) <= prob.K && lam == 0
         lam = 0.01
     end
 
@@ -306,7 +306,7 @@ function solvePACE_SCF(prob::Problem, y, weights, lam=0.;
     K = prob.K
     N = prob.N
 
-    if sum(weights .!= 0) <= prob.K
+    if sum(weights .!= 0) <= prob.K && lam == 0
         lam = 0.1
     end
 
@@ -483,7 +483,7 @@ function solvePACE_Power(prob, y, weights, lam=0.; q0=nothing, grid=100, local_i
     K = prob.K
     N = prob.N
 
-    if sum(weights .!= 0) <= prob.K
+    if sum(weights .!= 0) <= prob.K && lam == 0
         lam = 0.1
     end
 
@@ -626,7 +626,7 @@ function solvePACE_SCF_OLD(prob, y, weights, lam=0.; grid=100, local_iters=100, 
     K = prob.K
     N = prob.N
 
-    if sum(weights .!= 0) <= prob.K
+    if sum(weights .!= 0) <= prob.K && lam == 0
         lam = 0.1
     end
 
@@ -798,7 +798,7 @@ function solvePACE_GN(prob, y, weights, lam=0.; R₀=nothing, λ=0.)
     # initial condition
     if isnothing(R₀) R₀ = randrotation() end
 
-    if sum(weights .!= 0) <= prob.K
+    if sum(weights .!= 0) <= prob.K && lam == 0
         lam = 0.01
     end
 

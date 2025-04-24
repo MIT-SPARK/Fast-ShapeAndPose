@@ -15,7 +15,7 @@ function gendata(r, N, Ks, σms, problems_per_config)
                 prob, gt, y = genproblem(N=N, K=K, σm=σm, r=r)
                 lam = 0.0
                 if K >= N
-                    lam = 0.1
+                    lam = 1.0
                 end
                 weights = ones(prob.N)
 

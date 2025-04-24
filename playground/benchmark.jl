@@ -21,8 +21,8 @@ end
 Setup a basic problem given noise standard deviation `σm`.
 Mostly for benchmarking.
 """
-function setup(σm)
-    prob, gt, y = genproblem(σm=σm)
+function setup(σm, K=4)
+    prob, gt, y = genproblem(σm=σm, K=K)
     lam = 0.0
     weights = ones(prob.N)
     return prob, gt, y, weights, lam
