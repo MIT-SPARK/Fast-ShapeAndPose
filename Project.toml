@@ -1,0 +1,13 @@
+name = "FastPACE"
+uuid = "04398f19-1af0-49c5-97b2-238136a2f055"
+authors = ["Lorenzo Shaikewitz <lorenzos@mit.edu>"]
+version = "0.1.0"
+
+[deps]
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+SimpleRotations = "0fce36b9-6dcc-4fe6-81e6-89b1d3ce289e"
+Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
+
+[compat]
+LinearAlgebra = "1.11.0"
+Statistics = "1.11.1"
