@@ -25,6 +25,10 @@ function solvePACE_SCF(prob::Problem, y, weights, lam=0.;
         debug=false, all_logs=false)
 
     # TODO: CLEAN UP IMPLEMENTATION
+    # StaticArrays for faster
+    # No bounds checking
+    # More dots where possible
+    # Use views for slices
 
     ## SETUP
     K = prob.K
