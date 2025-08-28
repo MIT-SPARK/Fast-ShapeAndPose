@@ -6,13 +6,13 @@ using Statistics
 using SimpleRotations
 
 # Files
-include("pace_problem.jl")
+include("problem.jl")
 export genproblem
 
-include("pace_solvers.jl")
+include("scf_solver.jl")
 export solvePACE_SCF
 
-include("pace_certifier.jl")
+include("certifier.jl")
 export certify_rotmat
 
 end # module FastPACE

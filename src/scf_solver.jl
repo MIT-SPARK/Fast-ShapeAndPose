@@ -1,4 +1,4 @@
-## Solvers for category-level shape and pose estimation
+## SCF solver for category-level shape and pose estimation
 # Lorenzo Shaikewitz, 6/26/2025
 
 
