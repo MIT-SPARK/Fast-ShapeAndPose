@@ -58,7 +58,7 @@ function certify_rotmat(prob::Problem, soln::Solution, y, weights, lam=0.; tol=1
     push!(As, A1)
 
     # only use O(3) constraints to avoid violating LICQ
-    As = filter!(!isempty, As)
+    # As = filter!(!isempty, As)
     A = reduce(hcat, As .* [xlocal])
     # lagrange multipliers
     λ = A \ (C*xlocal)
@@ -67,6 +67,27 @@ function certify_rotmat(prob::Problem, soln::Solution, y, weights, lam=0.; tol=1
 
     return eigvals(S)[1] > -tol
 end
+
+
+## Quadratic forms of O(3) constraints
+# right hand rule constraints violate LICQ!
+const O3_1 = SMatrix{10,10}(vcat(hcat(diagm(ones(3)), zeros(3,7)), zeros(6,10), hcat(zeros(1,9), -1))...)
+const O3_2 = SMatrix{10,10}(vcat(zeros(3,10), hcat(zeros(3,3), diagm(ones(3)), zeros(3,4)), zeros(3,10), hcat(zeros(1,9), -1))...)
+const O3_3 = SMatrix{10,10}(vcat(zeros(6,10), hcat(zeros(3,6), diagm(ones(3)), zeros(3,1)), hcat(zeros(1,9), -1))...)
+const O3_4 = SMatrix{10,10}(vcat(hcat(zeros(3,3), 0.5*diagm(ones(3)), zeros(3,4)),
+                                 hcat(0.5*diagm(ones(3)), zeros(3,7)),
+                                 zeros(4,10))...)
+const O3_5 = SMatrix{10,10}(vcat(hcat(zeros(3,6), 0.5*diagm(ones(3)), zeros(3,1)),
+                                 zeros(3,10),
+                                 hcat(0.5*diagm(ones(3)), zeros(3,7)),
+                                 zeros(1,10))...)
+const O3_6 = SMatrix{10,10}(vcat(zeros(3,10),
+                                 hcat(zeros(3,6), 0.5*diagm(ones(3)), zeros(3,1)),
+                                 hcat(zeros(3,3), 0.5*diagm(ones(3)), zeros(3,4)),
+                                 zeros(1,10))...)
+const AONE = @SMatrix [(i,j)==(10,10) ? 1 : 0 for i in 1:10, j in 1:10]
+const O3_CONSTRAINTS = [O3_1, O3_2, O3_3, O3_4, O3_5, O3_6, AONE]
+
 
 
 """

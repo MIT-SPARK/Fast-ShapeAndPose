@@ -1,6 +1,175 @@
 ## SCF solver for category-level shape and pose estimation
 # Lorenzo Shaikewitz, 6/26/2025
 
+# SCF status
+@enum StatusSCF begin
+    FAILED
+    LOCAL_SOLUTION
+    GLOBAL_CERTIFIED
+end
+
+
+"""
+    solvePACE_SCF(prob, y, weights[...])
+
+Hyper-fast local solutions with initial guess
+
+# Arguments:
+- `prob`: shape & pose estimation problem data
+- `y`: keypoint measurements [3 x N]
+- `weights`: keypoint weights [N]
+- `λ=0`: shape regularization (must be >0 if N ≤ K)
+## Optional:
+- `max_iters=250`: iterations to terminate after
+- `q0=nothing`: intial guess (default is random)
+- `certify=false`: whether to call certifier
+- `tol=1e-6`: termination numerical tolerance
+
+# Returns:
+- `sol`: solution data
+- `opt`: optimal cost
+- `status`: OPTIMAL, 
+- `scf_iters`: number of solver iterations
+"""
+function solvePACE_SCF(prob::Problem, y, weights, λ=0.;
+                       max_iters::Int=150, q0=nothing, certify=false, tol=1e-6)
+
+    ## Setup
+    K = prob.K
+    N = prob.N
+
+    if (sum(weights .!= 0) <= prob.K) && (λ == 0)
+        λ = 0.1
+        @warn "overriding λ = 0.1 since N ≤ K."
+    end
+
+    ## eliminate position
+    ȳ = sum(weights .* eachcol(y)) ./ sum(weights)
+    B̄ = sum(weights .* eachslice(prob.B,dims=2)) ./ sum(weights)
+
+    ## eliminate shape
+    B̄s = (eachslice(prob.B,dims=2) .- [B̄]).*sqrt.(weights)
+    ȳs = reduce(hcat, (eachcol(y) .- [ȳ]).*sqrt.(weights))
+    B̂² = sum(transpose.(B̄s) .* B̄s)
+    A = 2*(B̂² + λ*I)
+    invA = inv(A)
+    # Schur complement
+    C1 = 2*(invA - invA*ones(K)*inv(ones(K)'*invA*ones(K))*ones(K)'*invA)
+    c2 = invA*ones(K)*inv(ones(K)'*invA*ones(K))
+
+    ## write Lagrangian
+    # constant term
+    # L = sum([ȳs[:,i]'*ȳs[:,i] for i = 1:N])
+    L = sum(transpose.(eachcol(ȳs)) .* eachcol(ȳs))
+    L += c2'*B̂²*c2
+    L += λ*(c2'*c2)
+    # quadratic in q
+    if λ > 0
+        # L123 = 4*sum([Ω1(ȳs[:,i])*Ω2(B̄s[i]*(I-λ*C1-C1*B̂²)*c2) for i = 1:N])
+        L123 = SMatrix{4,4}(4*sum(Ω1.(eachcol(ȳs)) .* Ω2.(B̄s .* [(I-λ*C1-C1*B̂²)*c2]))...)
+    else
+        # L123 = 4*sum([Ω1(ȳs[:,i])*Ω2(B̄s[i]*c2) for i = 1:N])
+        L123 = SMatrix{4,4}(4*sum(Ω1.(eachcol(ȳs)) .* Ω2.(B̄s.*[c2]))...)
+    end
+    # quartic in q
+    function Lquartic(q)
+        R = SMatrix{3,3}(quat2rotm(q)...)
+        # Bry = sum([B̄s[j]'*R'*ȳs[:,j] for j = 1:N])
+        Bry = sum(transpose.(B̄s).*[R'].*eachcol(ȳs))
+        # 4*sum([Ω1(ȳs[:,i])*Ω2(B̄s[i]*C1*(2*I-B̂²*C1-λ*C1)*Bry) for i = 1:N])
+        return SMatrix{4,4}(4*sum(Ω1.(eachcol(ȳs)) .* Ω2.(B̄s .* [C1*(2*I-B̂²*C1-λ*C1)*Bry]) )...)
+    end
+
+    # objective
+    obj(q) = q'*(1/2*(L123) + 1/4*Lquartic(q))*q + L
+    obj(q, mat) = q'*(1/4*(L123) + 1/4*mat)*q + L
+    # Lagrangian
+    ℒ(q) = Symmetric(L123 + Lquartic(q))
+
+    ## solve via self-consistent field iteration
+    # initial guess
+    if isnothing(q0)
+        # uniform random sample
+        q0 = normalize(@SArray randn(4))
+    end
+
+    # SCF
+    q_scf = q0
+    scf_iters = max_iters
+    opt = nothing
+    for iter = 1:max_iters
+        mat = ℒ(q_scf)
+        q_new = eigvecs(mat)[:,1] # accelerate?
+        q_new = normalize(q_new)
+
+        # termination: 
+        if abs(abs(q_scf'*q_new) - 1) < tol
+            opt = obj(q_new, mat)
+            scf_iters = iter
+            q_scf = q_new
+            break
+        end
+        q_scf = q_new
+    end
+
+    ## compute solution
+    R_est = quat2rotm(q_scf)
+    # c_est = reshape(C1*sum([B̄s[i]'*R_est'*ȳs[:,i] for i = 1:prob.N]) + c2,prob.K,1)
+    c_est = reshape(C1*sum(transpose.(B̄s) .* [R_est'] .* eachcol(ȳs)) + c2,prob.K,1)
+    p_est = reshape(ȳ,3,1) - R_est*B̄*c_est
+    soln = Solution(c_est, p_est, R_est)
+
+    ## check global optimality
+    if certify
+        # permutation matrix vec(R') => vec(R)
+        P = zeros(9,9) # permutation matrix vec(R') => vec(R)
+        P[1,1] = P[5,5] = P[9,9] = 1
+        P[2,4] = P[4,2] = P[3,7] = P[7,3] = P[6,8] = P[8,6] = 1
+
+        # compute F and g of objective in form:
+        # (F*(vec(R) - g))'*(F*(vec(R) - g))
+        F = zeros(9,9)
+        g = zeros(9)
+        # kronsum = sum([kron(ȳs[:,j]',B̄s[j]') for j = 1:N])*P
+        kronsum = sum(kron.(eachcol(ȳs), B̄s))'*P
+        if λ > 0
+            g += (lam*c2'*C1*kronsum)'
+            F += lam*(C1*kronsum)'*(C1*kronsum)
+        end
+        F += ((C1*kronsum)'*B̂² - 2*kronsum')*(C1*kronsum)
+        g += (c2'*(-kronsum + B̂²*C1*kronsum))'
+
+        # objective matrix [vec(R); 1]'*C*[vec(R); 1]
+        C = Symmetric([F  g;  g'  0])
+
+        # lienar system for lagrange multipliers
+        xlocal = [vec(soln.R); 1]
+        AL = reduce(hcat, O3_CONSTRAINTS .* [xlocal])
+        μ = AL \ (C*xlocal)
+        # certificate matrix
+        S = C - sum(μ .* O3_CONSTRAINTS)
+    end
+
+
+    ## report status
+    if isnothing(opt)
+        status = FAILED
+    elseif certify && (eigvals(S)[1] > -1e-3)
+        status = GLOBAL_CERTIFIED
+    else
+        status = LOCAL_SOLUTION
+    end
+
+    return soln, opt, status, scf_iters
+end
+
+
+# TODO:
+# - Speed clean ups:
+#   - StaticArrays everywhere (DONE), no bounds checking, more dots (DONE), views for slices?
+# - slower but transparent version with logs (see below)
+# - global version (see below)
+
 
 """
     solvePACE_SCF(prob, y, weights[...])
@@ -19,7 +188,7 @@ Hyper-fast local solutions with initial guess, can rerun for global solution.
 - `debug`: return logs of all distinct minima and objective function.
 - `all_logs`: return full logs of all runs.
 """
-function solvePACE_SCF(prob::Problem, y, weights, lam=0.; 
+function solvePACE_SCF2(prob::Problem, y, weights, lam=0.; 
         local_iters=100, obj_thresh=0., q0=nothing,
         global_iters=15,
         debug=false, all_logs=false)
@@ -27,7 +196,7 @@ function solvePACE_SCF(prob::Problem, y, weights, lam=0.;
     # TODO: CLEAN UP IMPLEMENTATION
     # StaticArrays for faster
     # No bounds checking
-    # More dots where possible
+    # More dots where possible (can I replace the sums?)
     # Use views for slices
 
     ## SETUP

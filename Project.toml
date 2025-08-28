@@ -4,15 +4,19 @@ authors = ["Lorenzo Shaikewitz <lorenzos@mit.edu>"]
 version = "0.1.0"
 
 [deps]
+BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 CertifySDP = "938286b2-42b9-4fea-b5c0-ef70cba7aedd"
 JuMP = "4076af6c-e467-56ae-b986-b466b2749572"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 MosekTools = "1ec41992-ff65-5c91-ac43-2df89e9693a4"
 SimpleRotations = "0fce36b9-6dcc-4fe6-81e6-89b1d3ce289e"
+StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 
 [compat]
+BenchmarkTools = "1.6.0"
 JuMP = "1.26.0"
 LinearAlgebra = "1.11.0"
 MosekTools = "0.15.9"
+StaticArrays = "1.9.14"
 Statistics = "1.11.1"

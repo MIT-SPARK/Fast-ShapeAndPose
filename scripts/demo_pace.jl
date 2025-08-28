@@ -9,7 +9,7 @@ prob, gt, y = genproblem(N = 10, K = 4, σm = 0.05, r = 0.2)
 
 weights = ones(prob.N)
 lam = 0.0
-out = @timed solvePACE_SCF(prob, y, weights, lam; global_iters=1, local_iters = 250)
+out = @timed solvePACE_SCF2(prob, y, weights, lam; global_iters=1, local_iters = 250)
 soln, obj_val = out.value
 time_solve = out.time - out.compile_time
 

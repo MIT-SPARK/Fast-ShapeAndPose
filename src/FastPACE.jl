@@ -2,6 +2,7 @@ module FastPACE
 
 using LinearAlgebra
 using Statistics
+using StaticArrays
 
 using SimpleRotations
 
@@ -10,7 +11,7 @@ include("problem.jl")
 export genproblem
 
 include("scf_solver.jl")
-export solvePACE_SCF
+export solvePACE_SCF2
 
 include("certifier.jl")
 export certify_rotmat
