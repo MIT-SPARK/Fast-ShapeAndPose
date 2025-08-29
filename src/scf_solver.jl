@@ -123,8 +123,8 @@ function solvePACE_SCF(prob::Problem, y, weights, λ=0.;
     if certify
         # permutation matrix vec(R') => vec(R)
         P = zeros(9,9) # permutation matrix vec(R') => vec(R)
-        P[1,1] = P[5,5] = P[9,9] = 1
-        P[2,4] = P[4,2] = P[3,7] = P[7,3] = P[6,8] = P[8,6] = 1
+        @inbounds P[1,1] = P[5,5] = P[9,9] = 1
+        @inbounds P[2,4] = P[4,2] = P[3,7] = P[7,3] = P[6,8] = P[8,6] = 1
 
         # compute F and g of objective in form:
         # (F*(vec(R) - g))'*(F*(vec(R) - g))

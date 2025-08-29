@@ -11,7 +11,7 @@ include("problem.jl")
 export genproblem
 
 include("scf_solver.jl")
-export solvePACE_SCF2
+export solvePACE_SCF
 
 include("certifier.jl")
 export certify_rotmat
