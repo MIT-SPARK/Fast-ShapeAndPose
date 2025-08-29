@@ -151,3 +151,72 @@ function solvePACE_SDP(prob, y, weights, λ=0.; silent=true)
 end
 
 
+"""
+    solvePACE_Manopt(prob, y, weights[, lam=0.])
+
+Solve shape & pose estimation problem `prob` given measurements `y`
+with weight `weights`. Nonzero `lam` needed if more shapes than keypoints.
+
+Fast local solutions from initial guess `R0`, but no guarantee of global optima.
+
+# Returns:
+- `sol`: solution data
+- `opt`: optimal cost
+- `status`: solution status
+"""
+function solvePACE_Manopt(prob, y, weights, λ=0.; R0=nothing)
+    ## Setup
+    K = prob.K
+
+    if (sum(weights .!= 0) <= prob.K) && (λ == 0)
+        λ = 0.1
+        @warn "overriding λ = 0.1 since N ≤ K."
+    end
+
+    ## eliminate position
+    ȳ = sum(weights .* eachcol(y)) ./ sum(weights)
+    B̄ = sum(weights .* eachslice(prob.B,dims=2)) ./ sum(weights)
+
+    ## eliminate shape
+    B̄s = (eachslice(prob.B,dims=2) .- [B̄]).*sqrt.(weights)
+    ȳs = reduce(hcat, (eachcol(y) .- [ȳ]).*sqrt.(weights))
+    B̂² = sum(transpose.(B̄s) .* B̄s)
+    A = 2*(B̂² + λ*I)
+    invA = inv(A)
+    # Schur complement
+    C1 = 2*(invA - invA*ones(K)*inv(ones(K)'*invA*ones(K))*ones(K)'*invA)
+    c2 = invA*ones(K)*inv(ones(K)'*invA*ones(K))
+
+    ## JuMP model
+    SO3 = Manifolds.Rotations(3)
+    model = Model()
+    @variable(model, R[1:3,1:3] in SO3)
+    if isnothing(R0) R0 = randrotation() end
+    set_start_value.(R, R0)
+    set_optimizer(model, Manopt.JuMP_Optimizer)
+
+    # objective (F*vec(R) + g)'*(F*vec(R) + g)
+    kronsum = sum(kron.(eachcol(ȳs), B̄s))'*PERMUTATION
+    F = ((C1*kronsum)'*B̂² - 2*kronsum')*(C1*kronsum)
+    g = (c2'*(-kronsum + B̂²*C1*kronsum))'
+    if λ > 0
+        g += (λ*c2'*C1*kronsum)'
+        F += λ*(C1*kronsum)'*(C1*kronsum)
+    end
+    # objective matrix [vec(R); 1]'*C*[vec(R); 1]
+    C = Symmetric([F  g;  g'  0])
+    @objective(model, Min, [vec(R); 1]'*C*[vec(R); 1])
+
+
+    # Solve with JuMP
+    optimize!(model)
+
+    # Convert to solution
+    R_est = value.(R)
+    R_est = project2SO3(R_est)
+    c_est = reshape(C1*sum(transpose.(B̄s) .* [R_est'] .* eachcol(ȳs)) + c2,prob.K,1)
+    p_est = reshape(ȳ,3,1) - R_est*B̄*c_est
+    soln = Solution(c_est, p_est, R_est)
+
+    return soln, objective_value(model), LOCAL_SOLUTION
+end

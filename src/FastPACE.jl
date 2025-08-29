@@ -6,6 +6,8 @@ using StaticArrays
 
 using JuMP
 using MosekTools
+import Manifolds
+import Manopt
 
 using SimpleRotations
 
@@ -20,6 +22,6 @@ include("certifier.jl")
 export certify_rotmat
 
 include("baseline_solvers.jl")
-export solvePACE_SDP
+export solvePACE_SDP, solvePACE_Manopt
 
 end # module FastPACE
