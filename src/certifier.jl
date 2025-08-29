@@ -3,6 +3,8 @@
 
 """
 Certify based on the rotation matrix representation.
+
+No / minimal performance improvements
 """
 function certify_rotmat(prob::Problem, soln::Solution, y, weights, lam=0.; tol=1e-3)
     K = prob.K

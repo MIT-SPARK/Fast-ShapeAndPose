@@ -9,6 +9,18 @@
 end
 
 
+# permutation matrix vec(R') => vec(R)
+const PERMUTATION = SMatrix{9,9}(hcat(vcat(1,zeros(8)),
+                                       vcat(zeros(3), 1, zeros(5)),
+                                       vcat(zeros(6), 1, zeros(2)),
+                                       vcat(0,1,zeros(7)),
+                                       vcat(zeros(4),1,zeros(4)),
+                                       vcat(zeros(7),1,0),
+                                       vcat(zeros(2),1,zeros(6)),
+                                       vcat(zeros(5),1,zeros(3)),
+                                       vcat(zeros(8),1)
+                                       )...)
+
 """
     solvePACE_SCF(prob, y, weights[...])
 
@@ -28,7 +40,7 @@ Hyper-fast local solutions with initial guess
 # Returns:
 - `sol`: solution data
 - `opt`: optimal cost
-- `status`: OPTIMAL, 
+- `status`: solution status
 - `scf_iters`: number of solver iterations
 """
 function solvePACE_SCF(prob::Problem, y, weights, λ=0.;
@@ -36,7 +48,6 @@ function solvePACE_SCF(prob::Problem, y, weights, λ=0.;
 
     ## Setup
     K = prob.K
-    N = prob.N
 
     if (sum(weights .!= 0) <= prob.K) && (λ == 0)
         λ = 0.1
@@ -121,23 +132,17 @@ function solvePACE_SCF(prob::Problem, y, weights, λ=0.;
 
     ## check global optimality
     if certify
-        # permutation matrix vec(R') => vec(R)
-        P = zeros(9,9) # permutation matrix vec(R') => vec(R)
-        @inbounds P[1,1] = P[5,5] = P[9,9] = 1
-        @inbounds P[2,4] = P[4,2] = P[3,7] = P[7,3] = P[6,8] = P[8,6] = 1
+        # kronsum = sum([kron(ȳs[:,j]',B̄s[j]') for j = 1:N])*P
+        kronsum = sum(kron.(eachcol(ȳs), B̄s))'*PERMUTATION
 
         # compute F and g of objective in form:
-        # (F*(vec(R) - g))'*(F*(vec(R) - g))
-        F = zeros(9,9)
-        g = zeros(9)
-        # kronsum = sum([kron(ȳs[:,j]',B̄s[j]') for j = 1:N])*P
-        kronsum = sum(kron.(eachcol(ȳs), B̄s))'*P
+        # (F*vec(R) + g)'*(F*vec(R) + g)
+        F = ((C1*kronsum)'*B̂² - 2*kronsum')*(C1*kronsum)
+        g = (c2'*(-kronsum + B̂²*C1*kronsum))'
         if λ > 0
-            g += (lam*c2'*C1*kronsum)'
-            F += lam*(C1*kronsum)'*(C1*kronsum)
+            g += (λ*c2'*C1*kronsum)'
+            F += λ*(C1*kronsum)'*(C1*kronsum)
         end
-        F += ((C1*kronsum)'*B̂² - 2*kronsum')*(C1*kronsum)
-        g += (c2'*(-kronsum + B̂²*C1*kronsum))'
 
         # objective matrix [vec(R); 1]'*C*[vec(R); 1]
         C = Symmetric([F  g;  g'  0])
@@ -165,8 +170,6 @@ end
 
 
 # TODO:
-# - Speed clean ups:
-#   - StaticArrays everywhere (DONE), no bounds checking, more dots (DONE), views for slices?
 # - slower but transparent version with logs (see below)
 # - global version (see below)
 

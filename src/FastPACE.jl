@@ -4,6 +4,9 @@ using LinearAlgebra
 using Statistics
 using StaticArrays
 
+using JuMP
+using MosekTools
+
 using SimpleRotations
 
 # Files
@@ -15,5 +18,8 @@ export solvePACE_SCF
 
 include("certifier.jl")
 export certify_rotmat
+
+include("baseline_solvers.jl")
+export solvePACE_SDP
 
 end # module FastPACE
