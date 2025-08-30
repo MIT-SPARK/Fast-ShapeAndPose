@@ -77,25 +77,11 @@ function solvePACE_SCF(prob::Problem, y, weights, λ=0.;
     # quadratic in q
     if λ > 0
         # L123 = 4*sum([Ω1(ȳs[:,i])*Ω2(B̄s[i]*(I-λ*C1-C1*B̂²)*c2) for i = 1:N])
-        L123 = SMatrix{4,4}(4*sum(Ω1.(eachcol(ȳs)) .* Ω2.(B̄s .* [(I-λ*C1-C1*B̂²)*c2]))...)
+        L123 = Symmetric(SMatrix{4,4}(4*sum(Ω1.(eachcol(ȳs)) .* Ω2.(B̄s .* [(I-λ*C1-C1*B̂²)*c2]))...))
     else
         # L123 = 4*sum([Ω1(ȳs[:,i])*Ω2(B̄s[i]*c2) for i = 1:N])
-        L123 = SMatrix{4,4}(4*sum(Ω1.(eachcol(ȳs)) .* Ω2.(B̄s.*[c2]))...)
+        L123 = Symmetric(SMatrix{4,4}(4*sum(Ω1.(eachcol(ȳs)) .* Ω2.(B̄s.*[c2]))...))
     end
-    # quartic in q
-    function Lquartic(q)
-        R = SMatrix{3,3}(quat2rotm(q)...)
-        # Bry = sum([B̄s[j]'*R'*ȳs[:,j] for j = 1:N])
-        Bry = sum(transpose.(B̄s).*[R'].*eachcol(ȳs))
-        # 4*sum([Ω1(ȳs[:,i])*Ω2(B̄s[i]*C1*(2*I-B̂²*C1-λ*C1)*Bry) for i = 1:N])
-        return SMatrix{4,4}(4*sum(Ω1.(eachcol(ȳs)) .* Ω2.(B̄s .* [C1*(2*I-B̂²*C1-λ*C1)*Bry]) )...)
-    end
-
-    # objective
-    obj(q) = q'*(1/2*(L123) + 1/4*Lquartic(q))*q + L
-    obj(q, mat) = q'*(1/4*(L123) + 1/4*mat)*q + L
-    # Lagrangian
-    ℒ(q) = Symmetric(L123 + Lquartic(q))
 
     ## solve via self-consistent field iteration
     # initial guess
@@ -109,13 +95,18 @@ function solvePACE_SCF(prob::Problem, y, weights, λ=0.;
     scf_iters = max_iters
     opt = nothing
     for iter = 1:max_iters
-        mat = ℒ(q_scf)
+        # compute lagrangian
+        R_scf = quat2rotm(q_scf)
+        mat = L123 + Symmetric(SMatrix{4,4}(4*sum(Ω1.(eachcol(ȳs)) .* Ω2.(B̄s .* [C1*(2*I-B̂²*C1-λ*C1)*sum(transpose.(B̄s).*[R_scf'].*eachcol(ȳs))]) )...))
+
+
+        # mat = ℒ(q_scf)
         q_new = eigvecs(mat)[:,1] # accelerate?
         q_new = normalize(q_new)
 
         # termination: 
         if abs(abs(q_scf'*q_new) - 1) < tol
-            opt = obj(q_new, mat)
+            opt = q_new'*(1/4*(L123) + 1/4*mat)*q_new + L
             scf_iters = iter
             q_scf = q_new
             break

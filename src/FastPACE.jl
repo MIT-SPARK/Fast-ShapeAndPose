@@ -3,6 +3,7 @@ module FastPACE
 using LinearAlgebra
 using Statistics
 using StaticArrays
+using Printf
 
 using JuMP
 using MosekTools
@@ -22,6 +23,12 @@ include("certifier.jl")
 export certify_rotmat
 
 include("baseline_solvers.jl")
-export solvePACE_SDP, solvePACE_Manopt
+export solvePACE_SDP, solvePACE_Manopt, solvePACE_GN
+
+include("run_synthetic.jl")
+export gendata, runlocal, runlocaliter
+
+include("gnc.jl")
+export gnc
 
 end # module FastPACE

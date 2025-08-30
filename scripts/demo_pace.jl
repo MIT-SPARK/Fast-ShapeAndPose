@@ -11,11 +11,17 @@ weights = ones(prob.N)
 lam = 0.0
 
 # You can solve and certify in one call
-out = @timed solvePACE_SCF(prob, y, weights, lam; certify=true)
+out = @timed solvePACE_SCF(prob, y, weights, lam; certify=false, max_iters=10)
 soln, opt, status, scf_iters = out.value
 time_all = out.time - out.compile_time
 
-@printf "Solution found in %.1f μs with status %s." time_all*1e6 string(status)
+@printf "Solution found in %.1f μs with status %s.\n" time_all*1e6 string(status)
+
+
+out = @timed FastPACE.solvePACE_GN(prob, y, weights, lam)
+time_gn = out.time - out.compile_time
+
+@printf "Solution found in %.1f μs.\n" time_gn*1e6
 
 # You can also certify separately:
 # begin

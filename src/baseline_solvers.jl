@@ -1,4 +1,7 @@
 ## Baseline solvers for category-level shape and pose estimation
+# - SDP (standard Shor relaxation, global optimality)
+# - Manopt (local on-manifold solver)
+# - Gauss-Newton (traditional local solver)
 # Lorenzo Shaikewitz, 8/29/2025
 
 
@@ -60,10 +63,10 @@ end
 
 
 """
-    solvePACE_SDP(prob, y, weights[, lam=0.])
+    solvePACE_SDP(prob, y, weights[, λ=0.])
 
 Solve shape & pose estimation problem `prob` given measurements `y`
-with weight `weights`. Nonzero `lam` needed if more shapes than keypoints.
+with weight `weights`. Nonzero `λ` needed if more shapes than keypoints.
 
 Uses first order convex relaxation, which finds certifially globally optimal solutions.
 
@@ -152,10 +155,10 @@ end
 
 
 """
-    solvePACE_Manopt(prob, y, weights[, lam=0.])
+    solvePACE_Manopt(prob, y, weights[, λ=0.])
 
 Solve shape & pose estimation problem `prob` given measurements `y`
-with weight `weights`. Nonzero `lam` needed if more shapes than keypoints.
+with weight `weights`. Nonzero `λ` needed if more shapes than keypoints.
 
 Fast local solutions from initial guess `R0`, but no guarantee of global optima.
 
@@ -220,3 +223,117 @@ function solvePACE_Manopt(prob, y, weights, λ=0.; R0=nothing)
 
     return soln, objective_value(model), LOCAL_SOLUTION
 end
+
+
+"""
+    skew(y)
+
+Converts vector `y ∈ R³` to skew symmetric matrix.
+"""
+function skew(y)
+    [0. -y[3] y[2]; y[3] 0. -y[1]; -y[2] y[1] 0]
+end
+
+"""
+    solvePACE_GN(prob, y, weights[, λ=0.; R₀, λ_lm = 0.])
+
+Solve shape & pose estimation problem `prob` given measurements `y`
+with weight `weights`. Nonzero `λ` needed if more shapes than keypoints.
+
+Gauss-Newton specialized to PACE. Set `linesearch=true` to use line search for
+best update and use `λ_lm` to do Levenberg-Marquardt. This is a local solver starting at `R₀`.
+"""
+function solvePACE_GN(prob, y, weights, λ=0.; R₀=nothing, λ_lm=0., max_iters=250)
+    ## Setup
+    K = prob.K
+
+    if (sum(weights .!= 0) <= prob.K) && (λ == 0)
+        λ = 0.1
+        @warn "overriding λ = 0.1 since N ≤ K."
+    end
+
+    ## eliminate position
+    ȳ = sum(weights .* eachcol(y)) ./ sum(weights)
+    B̄ = sum(weights .* eachslice(prob.B,dims=2)) ./ sum(weights)
+
+    ## eliminate shape
+    B̄s = (eachslice(prob.B,dims=2) .- [B̄]).*sqrt.(weights)
+    ȳs = reduce(hcat, (eachcol(y) .- [ȳ]).*sqrt.(weights))
+    B̂² = sum(transpose.(B̄s) .* B̄s)
+    A = 2*(B̂² + λ*I)
+    invA = inv(A)
+    # Schur complement
+    C1 = 2*(invA - invA*ones(K)*inv(ones(K)'*invA*ones(K))*ones(K)'*invA)
+    c2 = invA*ones(K)*inv(ones(K)'*invA*ones(K))
+
+    # optimal shape given rotation
+    c(R) = C1*sum(transpose.(B̄s) .* [R'] .* eachcol(ȳs)) + c2
+    # optimal position given shape & rotation
+    p(R,c) = ȳ - R*B̄*c
+
+    # registration residual
+    # ri(R, i) = R'*ȳs[:,i] - B̄s[i]*c(R)
+    # shape residual
+    # rc(R) = √λ*(c(R))
+
+    # Registration Jacobian
+    # Ji(R, i) = R'*skew(ȳs[i]) - 2*B̄s[i]*G*sum([B̄s[j]'*R'*skew(ȳs[j]) for j = 1:prob.N])
+    # Ji(R, i) = R'*skew(ȳs[:,i]) - 2*B̄s[i]*C1*sum(transpose.(B̄s) .* [R'] .* skew.(eachcol(ȳs)))
+
+    # Shape jacobian
+    # Jc(R) = 2*√λ*G*sum([B̄s[i]'*R'*skew(ȳs[i]) for i = 1:prob.N])
+    # Jc(R) = 2*√λ*C1*sum(transpose.(B̄s) .* [R'] .* skew.(eachcol(ȳs)))
+
+    ## G-N / L-M
+    # initial condition
+    if isnothing(R₀) R₀ = randrotation() end
+
+    # iterate
+    R_cur = R₀
+    for i = 1:max_iters
+        # registration residuals & Jacobians
+        Jis = [R_cur'] .* skew.(eachcol(ȳs)) - 2*B̄s .* [C1*sum(transpose.(B̄s) .* [R_cur'] .* skew.(eachcol(ȳs)))]
+        ris = [R_cur'] .* eachcol(ȳs) - B̄s .* [c(R_cur)]
+        
+        # shape residual & Jacobian
+        if λ != 0
+            rc = √λ*(c(R_cur))
+            Jc = 2*√λ*C1*sum(transpose.(B̄s) .* [R_cur'] .* skew.(eachcol(ȳs)))
+        else
+            rc = zeros(K)
+            Jc = zeros(K,3)
+        end
+
+        Σ = Jc'*Jc + sum(transpose.(Jis) .* Jis)
+        v = Jc'*rc + sum(transpose.(Jis) .* ris)
+
+        # TODO: this part could be better optimized (use dots, remove functions))
+        # Σ = Jc(R_cur)'*Jc(R_cur) + sum([Ji(R_cur,i)'*Ji(R_cur,i) for i = 1:prob.N])
+        # v = Jc(R_cur)'*rc(R_cur) + sum([Ji(R_cur,i)'*ri(R_cur,i) for i = 1:prob.N])
+        δθ = -inv(Σ + λ_lm*I)*v
+        α  = 1.0
+        R_cur = exp(skew(α*δθ))*R_cur
+
+        # check for convergence
+        if norm(δθ) < 1e-3
+            # println("G-N Convergence.")
+            break
+        end
+    end
+
+    # Convert to solution
+    R_est = project2SO3(R_cur)
+    c_est = c(R_est)
+    p_est = p(R_est, c_est)
+    soln = Solution(reshape(c_est,K,1), reshape(p_est,3,1), R_est)
+
+    # obj
+    # obj = rc(R_cur)'*rc(R_cur) + sum([ri(R_cur, i)'*ri(R_cur,i) for i = 1:prob.N])
+    rc = (λ == 0) ? zeros(K) : √λ*(c_est)
+    ris = [R_cur'] .* eachcol(ȳs) - B̄s .* [c_est]
+    obj = rc'*rc + sum(transpose.(ris) .* ris)
+
+    return soln, value.(obj)
+end
+
+# TODO: MAKE FASTER
