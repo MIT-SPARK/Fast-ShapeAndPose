@@ -4,7 +4,7 @@
 """
     gnc(prob, y, solver [; maxiterations=100, stopthresh=1e-6, μUpdate=1.4, cbar2=1.0])
 
-Run GNC given problem data `prob`, `y`, and solver function `soln, cost, residuals = solver(prob, y, weights)`
+Run GNC given problem data `prob`, `y`, and solver function `soln, cost, residuals = solver(prob, y, weights, λ)`
 where `residuals` are squared residuals for each input, size `prob.N`.
 
 Runs up to cost diff `stopthresh` or `maxiterations`. Update `μ->μUpdate*μ`.
@@ -47,9 +47,9 @@ function gnc(prob, y, λ, solver; maxiterations=100, stopthresh=1e-6, μUpdate=1
 
         # weights update (eq. 14)
         last_weights = weights
-        weights[residuals .<= μ/(μ+1)*cbar2] .= 1.
-        weights[residuals .> μ/(μ+1)*cbar2] = sqrt.(cbar2./residuals[residuals .> μ/(μ+1)*cbar2] * μ*(μ+1)) .- μ
-        weights[residuals .>= (μ+1)/μ*cbar2] .= 0.
+        weights[residuals .<= [μ/(μ+1)*cbar2]] .= 1.
+        weights[residuals .> [μ/(μ+1)*cbar2]] = sqrt.(cbar2./residuals[residuals .> μ/(μ+1)*cbar2] * μ*(μ+1)) .- μ
+        weights[residuals .>= [(μ+1)/μ*cbar2]] .= 0.
 
         # cost difference
         Δcost = abs(cost - last_cost)

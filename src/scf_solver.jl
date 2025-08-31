@@ -160,6 +160,93 @@ function solvePACE_SCF(prob::Problem, y, weights, λ=0.;
 end
 
 
+# copied and modified from above
+function gnc_SCF(prob::Problem, y, weights, λ; max_iters=100, tol=1e-6)
+
+    ## Setup
+    K = prob.K
+
+    if (sum(weights .!= 0) <= prob.K) && (λ == 0)
+        λ = 0.1
+        @warn "overriding λ = 0.1 since N ≤ K."
+    end
+
+    ## eliminate position
+    ȳ = sum(weights .* eachcol(y)) ./ sum(weights)
+    B̄ = sum(weights .* eachslice(prob.B,dims=2)) ./ sum(weights)
+
+    ## eliminate shape
+    B̄s = (eachslice(prob.B,dims=2) .- [B̄]).*sqrt.(weights)
+    ȳs = reduce(hcat, (eachcol(y) .- [ȳ]).*sqrt.(weights))
+    B̂² = sum(transpose.(B̄s) .* B̄s)
+    A = 2*(B̂² + λ*I)
+    invA = inv(A)
+    # Schur complement
+    C1 = 2*(invA - invA*ones(K)*inv(ones(K)'*invA*ones(K))*ones(K)'*invA)
+    c2 = invA*ones(K)*inv(ones(K)'*invA*ones(K))
+
+    ## write Lagrangian
+    # constant term
+    # L = sum([ȳs[:,i]'*ȳs[:,i] for i = 1:N])
+    L = sum(transpose.(eachcol(ȳs)) .* eachcol(ȳs))
+    L += c2'*B̂²*c2
+    L += λ*(c2'*c2)
+    # quadratic in q
+    if λ > 0
+        # L123 = 4*sum([Ω1(ȳs[:,i])*Ω2(B̄s[i]*(I-λ*C1-C1*B̂²)*c2) for i = 1:N])
+        L123 = Symmetric(SMatrix{4,4}(4*sum(Ω1.(eachcol(ȳs)) .* Ω2.(B̄s .* [(I-λ*C1-C1*B̂²)*c2]))...))
+    else
+        # L123 = 4*sum([Ω1(ȳs[:,i])*Ω2(B̄s[i]*c2) for i = 1:N])
+        L123 = Symmetric(SMatrix{4,4}(4*sum(Ω1.(eachcol(ȳs)) .* Ω2.(B̄s.*[c2]))...))
+    end
+
+    ## solve via self-consistent field iteration
+    # initial guess
+    q0 = normalize(@SArray randn(4))
+
+    # SCF
+    q_scf = q0
+    scf_iters = max_iters
+    opt = nothing
+    for iter = 1:max_iters
+        # compute lagrangian
+        R_scf = quat2rotm(q_scf)
+        mat = L123 + Symmetric(SMatrix{4,4}(4*sum(Ω1.(eachcol(ȳs)) .* Ω2.(B̄s .* [C1*(2*I-B̂²*C1-λ*C1)*sum(transpose.(B̄s).*[R_scf'].*eachcol(ȳs))]) )...))
+
+
+        # mat = ℒ(q_scf)
+        q_new = eigvecs(mat)[:,1] # accelerate?
+        q_new = normalize(q_new)
+
+        # termination: 
+        if abs(abs(q_scf'*q_new) - 1) < tol
+            opt = q_new'*(1/4*(L123) + 1/4*mat)*q_new + L
+            scf_iters = iter
+            q_scf = q_new
+            break
+        end
+        q_scf = q_new
+    end
+
+    ## compute solution
+    R_est = quat2rotm(q_scf)
+    # c_est = reshape(C1*sum([B̄s[i]'*R_est'*ȳs[:,i] for i = 1:prob.N]) + c2,prob.K,1)
+    c_est = reshape(C1*sum(transpose.(B̄s) .* [R_est'] .* eachcol(ȳs)) + c2,prob.K,1)
+    p_est = reshape(ȳ,3,1) - R_est*B̄*c_est
+    soln = Solution(c_est, p_est, R_est)
+
+    ## compute residuals and cost (no weights)
+    r = eachcol(y) - [R_est].*(eachslice(prob.B, dims=2).*[c_est]) .- [p_est]
+    r² = reduce(vcat,transpose.(r).*r)
+
+    cost = sum(weights .* r²) + λ*(c_est[:,1]'*c_est[:,1])
+
+    return soln, cost, r²
+end
+
+
+
+
 # TODO:
 # - slower but transparent version with logs (see below)
 # - global version (see below)
