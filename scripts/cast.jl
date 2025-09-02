@@ -6,12 +6,50 @@
 # - optimality certificate
 # Lorenzo Shaikewitz, 8/29/2025
 
-# TODO: NEED A GNC IMPLEMENTATION OF SCF
-
+using LinearAlgebra
+using Statistics
 import JSON
 using MAT
+using ArgParse
+using Serialization
+using Printf
+
+using SimpleRotations
 
 using FastPACE
+
+## Command-line arguments
+s = ArgParseSettings()
+@add_arg_table s begin
+    "--force"
+        help = "Rerun even if data already saved"
+        action = :store_true
+    "method"
+        help = "method to run: SCF, GN, or all. Can call multiple like [SCF,GN] (no spaces)"
+        default = "SCF"
+end
+parsed_args = parse_args(ARGS, s)
+
+# don't re-run methods unless force has been called
+methods = parsed_args["method"]
+methods = isa(methods, Vector) ? methods : [methods]
+if methods[1] == "all"
+    methods = ["SCF", "GN"]
+end
+methods_to_run = []
+parsed_args["force"] = true
+if parsed_args["force"]
+    methods_to_run = methods
+else
+    for m in methods
+        if isfile("data/cast/$m.dat")
+            println("Using data in `data/cast` for $m.")
+        else
+            push!(methods_to_run, m)
+        end
+    end
+end
+
 
 # load keypoint data
 dets = JSON.parsefile("data/cast.json")
@@ -33,29 +71,61 @@ close(file)
 # create problem
 prob = FastPACE.Problem(size(shapes,2), size(shapes,3), 0.05, 0.2, shapes)
 
-## solve
-λ = 0.
 
-times = -ones(length(keys(kpts_test)),2)
-errR = -ones(length(keys(kpts_test)),2)
-errp = -ones(length(keys(kpts_test)),2)
-for (i,frames) in enumerate(sort(keys(kpts_test)))
-    y = kpts_test[1]
+# solve!
+if !isempty(methods_to_run)
+    λ = 0.
 
-    # solve with SCF
-    out = @timed solvePACE_SCF(prob, y, weights, lam; certify=false, max_iters = 250)
-    soln, opt, status, scf_iters = out.value
-    time_scf = out.time - out.compile_time
-    times[i,1] = time_scf
+    times = Dict(Pair.(methods_to_run, [Dict()]))
+    gnc_success = Dict(Pair.(methods_to_run, [Dict()]))
+    solns = Dict(Pair.(methods_to_run, [Dict()]))
+    for frame in sort(collect(keys(kpts_test)))
+        y = kpts_test[frame][1]
 
+        for method in methods_to_run
+            if method == "SCF"
+                out = @timed gnc(prob, y, λ, FastPACE.gnc_SCF; cbar2 = 0.005, μUpdate = 1.4) # 0.005 is good
+                soln, inliers, success = out.value
+            elseif method == "GN"
+                # out = @timed solvePACE_GN(prob, y, weights, lam; max_iters = 250)
+                # soln, opt = out.value
+                # time_gn = out.time - out.compile_time
+                # times[method][frame] = time_gn
+            else
+                error("Method $method not implemented.")
+            end
 
-    # solve with GN
-    out = @timed solvePACE_GN(prob, y, weights, lam; max_iters = 250)
-    soln, opt = out.value
-    time_gn = out.time - out.compile_time
-    times[i,2] = time_gn
+            gnc_success[method][frame] = success
+            time_scf = out.time - out.compile_time
+            times[method][frame] = time_scf
+            solns[method][frame] = soln
+        end
+       
 
-    if mod(frame, 10) == 0
-        print("$frame ")
+        if mod(frame, 10) == 0
+            print("$frame ")
+        end
     end
+
+    # save
+    for method in methods_to_run
+        serialize("data/cast/$method.dat", Dict("times"=>times[method], "gnc_success"=>gnc_success[method], "solns"=>solns[method]))
+    end
+end
+
+# visualize!
+for method in methods
+    data = deserialize("data/cast/$method.dat")
+    times = data["times"]
+    gnc_success = data["gnc_success"]
+    solns = data["solns"]
+    frames = keys(solns)
+
+    errR = [roterror(solns[frame].R, gt_test[frame][1][1]) for frame in frames]
+    errp = [norm(solns[frame].p - gt_test[frame][1][2]) for frame in frames]
+
+    println("------$method------")
+    
+    @printf "R error: %.1f°, t error: %.1f mm (%d frames)\n" mean(errR) mean(errp)*1000 length(frames)
+    @printf "R error: %.1f°, t error: %.1f mm (%d successful)\n" mean(errR[gnc_success.(frames)]) mean(errp[gnc_success.(frames)])*1000 sum(gnc_success.(frames))
 end

@@ -4,6 +4,7 @@ authors = ["Lorenzo Shaikewitz <lorenzos@mit.edu>"]
 version = "0.1.0"
 
 [deps]
+ArgParse = "c7e460c6-2fb9-53a9-8c5b-16f535851c63"
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 CertifySDP = "938286b2-42b9-4fea-b5c0-ef70cba7aedd"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
@@ -21,6 +22,7 @@ Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 TexTables = "ebf5ac4f-3ec1-555f-9ac9-3d72ed88c471"
 
 [compat]
+ArgParse = "1.2.0"
 BenchmarkTools = "1.6.0"
 DataFrames = "1.7.1"
 JSON = "0.21.4"

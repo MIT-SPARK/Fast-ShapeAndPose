@@ -12,6 +12,9 @@ import Manopt
 
 using SimpleRotations
 
+# make dictionary callable
+(d::Dict)(k) = d[k] 
+
 # Files
 include("problem.jl")
 export genproblem
