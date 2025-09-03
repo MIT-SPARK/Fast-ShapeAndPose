@@ -307,10 +307,10 @@ function solvePACE_GN(prob, y, weights, λ=0.; R₀=nothing, λ_lm=0., max_iters
         Σ = Jc'*Jc + sum(transpose.(Jis) .* Jis)
         v = Jc'*rc + sum(transpose.(Jis) .* ris)
 
-        # TODO: this part could be better optimized (use dots, remove functions))
+        # TODO: this part could be better optimized (use dots, remove functions)
         # Σ = Jc(R_cur)'*Jc(R_cur) + sum([Ji(R_cur,i)'*Ji(R_cur,i) for i = 1:prob.N])
         # v = Jc(R_cur)'*rc(R_cur) + sum([Ji(R_cur,i)'*ri(R_cur,i) for i = 1:prob.N])
-        δθ = -inv(Σ + λ_lm*I)*v
+        δθ = -pinv(Σ + λ_lm*I)*v
         α  = 1.0
         R_cur = exp(skew(α*δθ))*R_cur
 
@@ -333,7 +333,7 @@ function solvePACE_GN(prob, y, weights, λ=0.; R₀=nothing, λ_lm=0., max_iters
     ris = [R_cur'] .* eachcol(ȳs) - B̄s .* [c_est]
     obj = rc'*rc + sum(transpose.(ris) .* ris)
 
-    return soln, value.(obj)
+    return soln, obj
 end
 
 # TODO: MAKE FASTER

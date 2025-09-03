@@ -13,6 +13,8 @@ using MAT
 using ArgParse
 using Serialization
 using Printf
+import Plots
+using StatsPlots
 
 using SimpleRotations
 
@@ -26,7 +28,7 @@ s = ArgParseSettings()
         action = :store_true
     "method"
         help = "method to run: SCF, GN, or all. Can call multiple like [SCF,GN] (no spaces)"
-        default = "SCF"
+        default = "all"
 end
 parsed_args = parse_args(ARGS, s)
 
@@ -37,7 +39,6 @@ if methods[1] == "all"
     methods = ["SCF", "GN"]
 end
 methods_to_run = []
-parsed_args["force"] = true
 if parsed_args["force"]
     methods_to_run = methods
 else
@@ -49,7 +50,6 @@ else
         end
     end
 end
-
 
 # load keypoint data
 dets = JSON.parsefile("data/cast.json")
@@ -76,28 +76,26 @@ prob = FastPACE.Problem(size(shapes,2), size(shapes,3), 0.05, 0.2, shapes)
 if !isempty(methods_to_run)
     λ = 0.
 
-    times = Dict(Pair.(methods_to_run, [Dict()]))
-    gnc_success = Dict(Pair.(methods_to_run, [Dict()]))
-    solns = Dict(Pair.(methods_to_run, [Dict()]))
+    times = Dict(Pair.(methods_to_run, [Dict() for i in methods_to_run]))
+    gnc_success = Dict(Pair.(methods_to_run, [Dict() for i in methods_to_run]))
+    solns = Dict(Pair.(methods_to_run, [Dict() for i in methods_to_run]))
     for frame in sort(collect(keys(kpts_test)))
         y = kpts_test[frame][1]
 
         for method in methods_to_run
             if method == "SCF"
-                out = @timed gnc(prob, y, λ, FastPACE.gnc_SCF; cbar2 = 0.005, μUpdate = 1.4) # 0.005 is good
+                out = @timed gnc(prob, y, λ, solvePACE_SCF; cbar2 = 0.005, μUpdate = 1.4) # 0.005 is good
                 soln, inliers, success = out.value
             elseif method == "GN"
-                # out = @timed solvePACE_GN(prob, y, weights, lam; max_iters = 250)
-                # soln, opt = out.value
-                # time_gn = out.time - out.compile_time
-                # times[method][frame] = time_gn
+                out = @timed gnc(prob, y, λ, solvePACE_GN; cbar2 = 0.005, μUpdate = 1.4) # 0.005 is good
+                soln, inliers, success = out.value
             else
                 error("Method $method not implemented.")
             end
 
             gnc_success[method][frame] = success
-            time_scf = out.time - out.compile_time
-            times[method][frame] = time_scf
+            time_dif = out.time - out.compile_time
+            times[method][frame] = time_dif
             solns[method][frame] = soln
         end
        
@@ -114,7 +112,8 @@ if !isempty(methods_to_run)
 end
 
 # visualize!
-for method in methods
+time_plot = Plots.plot()
+for (i,method) in enumerate(methods)
     data = deserialize("data/cast/$method.dat")
     times = data["times"]
     gnc_success = data["gnc_success"]
@@ -128,4 +127,10 @@ for method in methods
     
     @printf "R error: %.1f°, t error: %.1f mm (%d frames)\n" mean(errR) mean(errp)*1000 length(frames)
     @printf "R error: %.1f°, t error: %.1f mm (%d successful)\n" mean(errR[gnc_success.(frames)]) mean(errp[gnc_success.(frames)])*1000 sum(gnc_success.(frames))
+    # Plots.violin!(ones(length(frames))*i,times.(frames),label=method)
+    Plots.boxplot!(repeat([method],length(frames)), times.(frames), label=false)#, side=(i == 1) ? :left : :right)
 end
+Plots.plot!(ylims=(0,0.02), ylabel="Time (s)")
+time_plot
+
+# TODO: time histogram

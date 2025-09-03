@@ -32,6 +32,6 @@ include("run_synthetic.jl")
 export gendata, runlocal, runlocaliter
 
 include("gnc.jl")
-export gnc
+export gnc, gnc_wrapper
 
 end # module FastPACE

@@ -10,7 +10,7 @@ where `residuals` are squared residuals for each input, size `prob.N`.
 Runs up to cost diff `stopthresh` or `maxiterations`. Update `μ->μUpdate*μ`.
 Use outlier rejection threshold `cbar2`.
 """
-function gnc(prob, y, λ, solver; maxiterations=100, stopthresh=1e-6, μUpdate=1.4, cbar2=1.0, debug=false, solverargs=Dict())
+function gnc(prob, y, λ, solver; maxiterations=100, stopthresh=1e-6, μUpdate=1.4, cbar2=1.0, debug=false, kwargs...)
     weights = ones(prob.N)
     last_weights = weights
     last_cost = 1e6
@@ -35,8 +35,13 @@ function gnc(prob, y, λ, solver; maxiterations=100, stopthresh=1e-6, μUpdate=1
             break
         end
 
-        # non-minimal solver
-        soln, cost, residuals = solver(prob, y, weights, λ; solverargs...)
+        # non-minimal solver block
+        # assume it outputs soln, cost, ...
+        out = solver(prob, y, weights, λ; kwargs...)
+        soln, cost = out[1], out[2]
+        r = eachcol(y) - [soln.R].*(eachslice(prob.B, dims=2).*[soln.c]) .- [soln.p]
+        residuals = reduce(vcat,transpose.(r).*r)
+        # soln, cost, residuals = solver(prob, y, weights, λ; solverargs...)
         # add constant cost for each outlier
         cost += cbar2*sum(weights.==0)
 
