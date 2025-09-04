@@ -51,7 +51,8 @@ function solvePACE_SCF(prob::Problem, y, weights, λ=0.;
 
     if (sum(weights .!= 0) <= prob.K) && (λ == 0)
         λ = 0.1
-        @warn "overriding λ = 0.1 since N ≤ K."
+        # @warn "overriding λ = 0.1 since N ≤ K."
+        # TODO: better thing to set lambda to?
     end
 
     ## eliminate position
@@ -150,7 +151,7 @@ function solvePACE_SCF(prob::Problem, y, weights, λ=0.;
     if isnothing(opt)
         status = FAILED
         r = eachcol(y) - [soln.R].*(eachslice(prob.B, dims=2).*[soln.c]) .- [soln.p]
-        opt = sum(weights .* (transpose.(r).*r)) + λ*(c_est[:,1]'*c_est[:,1])
+        opt = sum(weights .* (transpose.(r).*r))[1] + λ*(c_est[:,1]'*c_est[:,1])
     elseif certify && (eigvals(S)[1] > -1e-3)
         status = GLOBAL_CERTIFIED
     else

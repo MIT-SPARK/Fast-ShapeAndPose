@@ -3,7 +3,7 @@
 # - pose estimate
 # - total runtime
 # - GNC iterations
-# - optimality certificate
+# - optimality certificate (?)
 # Lorenzo Shaikewitz, 8/29/2025
 
 using LinearAlgebra
@@ -52,7 +52,7 @@ else
 end
 
 # load keypoint data
-dets = JSON.parsefile("data/cast.json")
+dets = JSON.parsefile("data/cast/cast.json")
 camK = convert.(Float64,reduce(hcat,dets[1]["K_mat"])')
 
 kpts_test = Dict()
@@ -64,7 +64,7 @@ for (i,d) in enumerate(dets)
 end
 
 # load CAD frame
-file = matopen("data/racecar_lib.mat")
+file = matopen("data/cast/racecar_lib.mat")
 shapes = read(file, "shapes") # 3 x N x K
 close(file)
 
@@ -132,5 +132,3 @@ for (i,method) in enumerate(methods)
 end
 Plots.plot!(ylims=(0,0.02), ylabel="Time (s)")
 time_plot
-
-# TODO: time histogram

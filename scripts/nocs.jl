@@ -1,7 +1,163 @@
 ## Run on NOCS-REAL275 dataset with GNC.
 # Measure:
 # - pose estimate
+# - shape estimate!
 # - total runtime
 # - GNC iterations
 # - optimality certificate
 # Lorenzo Shaikewitz, 8/28/2025
+
+using ArgParse
+using LinearAlgebra
+using Statistics
+using Serialization
+using Glob
+import JSON
+using MAT
+using Printf
+import Plots
+using StatsPlots
+using SimpleRotations
+
+using FastPACE
+
+## Command-line arguments
+s = ArgParseSettings()
+@add_arg_table s begin
+    "--force"
+        help = "rerun even if data already saved"
+        action = :store_true
+    "method"
+        help = "method to run: SCF, GN, or all. Can call multiple like [SCF,GN] (no spaces)"
+        default = "SCF"
+    "object"
+        help = "object to test on: mug, laptop, etc."
+        default = "mug"
+end
+parsed_args = parse_args(ARGS, s)
+parsed_args["force"] = true
+
+# don't re-run methods unless force has been called
+methods = parsed_args["method"]
+methods = isa(methods, Vector) ? methods : [methods]
+if methods[1] == "all"
+    methods = ["SCF", "GN"]
+end
+methods_to_run = []
+if parsed_args["force"]
+    methods_to_run = methods
+else
+    for m in methods
+        if isfile("data/nocs/$(parsed_args["object"])/$m.dat")
+            println("Using data in `data/nocs/$(parsed_args["object"])` for $m.")
+        else
+            push!(methods_to_run, m)
+        end
+    end
+end
+
+## load data
+# load keypoint data
+det_files = glob("data/nocs/mug/*.json")
+kpts_all = Dict()
+gt_all = Dict()
+for file in det_files
+    dets = JSON.parsefile(file)
+
+    kpts_test = Dict()
+    gt_test = Dict()
+    for (i,d) in enumerate(dets)
+        kpts_test[i] = Dict(1=>convert.(Float64,reduce(hcat, d["est_world_keypoints"]))) # [m]
+        T = convert.(Float64, reduce(hcat, d["gt_pose"]))'
+        gt_test[i] = Dict(1=>(T[1:3,1:3], T[1:3,4]))
+    end
+    # push!(kpts_all, kpts_test)
+    # push!(gt_all, gt_test)
+    json = split(file,"/")[end]
+    kpts_all[json] = kpts_test
+    gt_all[json] = gt_test
+end
+
+# CAD frame
+file = matopen("data/nocs/mug/shapes_mug43.mat")
+shapes = read(file, "shapes") # 3 x N x K
+close(file)
+
+# create problem
+prob = FastPACE.Problem(size(shapes,2), size(shapes,3), 0.05, 0.2, shapes)
+
+# solve!
+if !isempty(methods_to_run)
+    λ = 0.
+
+    times       = Dict(Pair.(methods_to_run, [Dict([Pair(split(file,"/")[end], Dict()) for file in det_files]) for i in methods_to_run]))
+    gnc_success = Dict(Pair.(methods_to_run, [Dict([Pair(split(file,"/")[end], Dict()) for file in det_files]) for i in methods_to_run]))
+    solns       = Dict(Pair.(methods_to_run, [Dict([Pair(split(file,"/")[end], Dict()) for file in det_files]) for i in methods_to_run]))
+    for (id, file) in enumerate(det_files)
+        json = split(file,"/")[end]
+        println("\n-----$json ($(length(keys(kpts_all[json]))) frames)-----")
+        kpts_test = kpts_all[json]
+        gt_test = gt_all[json]
+
+        for frame in sort(collect(keys(kpts_test)))
+            y = kpts_test[frame][1]
+
+            for method in methods_to_run
+                if method == "SCF"
+                    out = @timed gnc(prob, y, λ, solvePACE_SCF; cbar2 = 0.01, μUpdate = 1.4)
+                    soln, inliers, success = out.value
+                    # Main.@infiltrate
+                elseif method == "GN"
+                    out = @timed gnc(prob, y, λ, solvePACE_GN; cbar2 = 0.01, μUpdate = 1.4)
+                    soln, inliers, success = out.value
+                else
+                    error("Method $method not implemented.")
+                end
+
+                gnc_success[method][json][frame] = success
+                time_dif = out.time - out.compile_time
+                times[method][json][frame] = time_dif
+                solns[method][json][frame] = soln
+            end
+        
+
+            if mod(frame, 10) == 0
+                print("$frame ")
+            end
+        end
+        break # TEMP
+    end
+
+    # save
+    for method in methods_to_run
+        save_dict = Dict("times"=>times[method], "gnc_success"=>gnc_success[method], "solns"=>solns[method])
+        serialize("data/nocs/$(parsed_args["object"])/$method.dat", save_dict)
+    end
+end
+
+# visualize!
+time_plot = Plots.plot()
+jsons = sort(collect(keys(kpts_all)))
+for (i,method) in enumerate(methods)
+    data = deserialize("data/nocs/$(parsed_args["object"])/$method.dat")
+    for (jsonnum,json) in enumerate(jsons)
+        println("\n-----$json ($(length(keys(data["times"][json]))) frames)-----")
+        times = data["times"][json]
+        gnc_success = data["gnc_success"][json]
+        solns = data["solns"][json]
+        frames = keys(solns)
+
+        errR = [roterror(solns[frame].R, project2SO3(gt_all[json][frame][1][1])) for frame in frames]
+        errp = [norm(solns[frame].p - gt_all[json][frame][1][2]) for frame in frames]
+
+        println("$method:")
+        @printf "R error: %.1f°, t error: %.1f mm\n" mean(errR) mean(errp)*1000
+        @printf "R error: %.1f°, t error: %.1f mm (%d successful frames)\n" mean(errR[gnc_success.(frames)]) mean(errp[gnc_success.(frames)])*1000 sum(gnc_success.(frames))
+        # Plots.violin!(ones(length(frames))*i,times.(frames),label=method)
+        Plots.boxplot!(repeat([jsonnum],length(frames)), times.(frames), label=(jsonnum==1) ? method : false, c=i)#, side=(i == 1) ? :left : :right)
+
+        break # TEMP
+    end
+end
+Plots.plot!(ylabel="Time (s)")#, ylims=(0,0.2))
+time_plot

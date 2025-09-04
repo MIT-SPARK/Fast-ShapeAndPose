@@ -82,7 +82,7 @@ function solvePACE_SDP(prob, y, weights, λ=0.; silent=true)
 
     if (sum(weights .!= 0) <= prob.K) && (λ == 0)
         λ = 0.1
-        @warn "overriding λ = 0.1 since N ≤ K."
+        # @warn "overriding λ = 0.1 since N ≤ K."
     end
 
     ## eliminate position
@@ -173,7 +173,7 @@ function solvePACE_Manopt(prob, y, weights, λ=0.; R0=nothing)
 
     if (sum(weights .!= 0) <= prob.K) && (λ == 0)
         λ = 0.1
-        @warn "overriding λ = 0.1 since N ≤ K."
+        # @warn "overriding λ = 0.1 since N ≤ K."
     end
 
     ## eliminate position
@@ -249,7 +249,7 @@ function solvePACE_GN(prob, y, weights, λ=0.; R₀=nothing, λ_lm=0., max_iters
 
     if (sum(weights .!= 0) <= prob.K) && (λ == 0)
         λ = 0.1
-        @warn "overriding λ = 0.1 since N ≤ K."
+        # @warn "overriding λ = 0.1 since N ≤ K."
     end
 
     ## eliminate position
