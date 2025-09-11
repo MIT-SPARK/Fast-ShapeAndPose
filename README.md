@@ -12,6 +12,9 @@ TODO:
 - Julia environment
 
 ## Reproducing Results
+All methods: recommending one method at a time to prevent from going crazy.
+
+- Synthetic:
 - CAST: give link to keypoints (detector not provided)
 - NOCS: give link to keypoints, YOLO detector pt files (yolov8 github)
 - ApolloScape: all from GSNet

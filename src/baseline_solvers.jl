@@ -146,7 +146,7 @@ function solvePACE_SDP(prob, y, weights, λ=0.; silent=true)
     gap = (obj_est - opt) / (opt+1)
 
     status = LOCAL_SOLUTION
-    if gap < 1e-3
+    if gap < 1e-4
         status = GLOBAL_CERTIFIED
     end
 

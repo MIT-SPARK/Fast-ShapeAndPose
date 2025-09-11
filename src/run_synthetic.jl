@@ -60,20 +60,23 @@ end
 function runlocaliter(data, solver; kwargs...)
     errors = []
     runtimes = []
+    statuses = []
     iters = []
     for data_K in data
-        errors_K = []; runtimes_K = []; iters_K = []
+        errors_K = []; runtimes_K = []; iters_K = []; statuses_K = []
         for data_σm in data_K
             print("$(data_σm[1][1].σm) ")
-            errors_σm = []; runtimes_σm = []; iters_σm = []
+            errors_σm = []; runtimes_σm = []; iters_σm = []; statuses_σm = []
             for (prob, gt, y, weights, lam) in data_σm
                 out = @timed solver(prob, y, weights, lam; kwargs...)
                 soln = out.value[1]
                 _, R_err = rotm2axang(gt.R'*soln.R); R_err *= 180/π
+                status = out.value[3]
                 if out.compile_time == 0.0
                     push!(errors_σm, R_err)
                     push!(runtimes_σm, out.time)
                     push!(iters_σm, out.value[end])
+                    push!(statuses_σm, status)
                 else
                     println("Compiling...")
                 end
@@ -81,10 +84,12 @@ function runlocaliter(data, solver; kwargs...)
             push!(errors_K, errors_σm)
             push!(runtimes_K, runtimes_σm)
             push!(iters_K, iters_σm)
+            push!(statuses_K, statuses_σm)
         end
         push!(errors, errors_K)
         push!(runtimes, runtimes_K)
         push!(iters, iters_K)
+        push!(statuses, statuses_K)
     end
-    return errors, runtimes, iters
+    return errors, runtimes, iters, statuses
 end
