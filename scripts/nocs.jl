@@ -29,13 +29,13 @@ s = ArgParseSettings()
         action = :store_true
     "method"
         help = "method to run: SCF, GN, or all. Can call multiple like [SCF,GN] (no spaces)"
-        default = "SCF"
+        default = "all"
     "object"
         help = "object to test on: mug, laptop, etc."
         default = "mug"
 end
 parsed_args = parse_args(ARGS, s)
-parsed_args["force"] = true
+# parsed_args["force"] = true
 
 # don't re-run methods unless force has been called
 methods = parsed_args["method"]
@@ -69,7 +69,13 @@ for file in det_files
     for (i,d) in enumerate(dets)
         kpts_test[i] = Dict(1=>convert.(Float64,reduce(hcat, d["est_world_keypoints"]))) # [m]
         T = convert.(Float64, reduce(hcat, d["gt_pose"]))'
-        gt_test[i] = Dict(1=>(T[1:3,1:3], T[1:3,4]))
+        # gt_test[i] = Dict(1=>(T[1:3,1:3], T[1:3,4]))
+
+        # fix the ground truth (to align models)
+        # rotate R by 90 deg about x axis
+        Roffset = axang2rotm([1.;0;0],-π/2)
+
+        gt_test[i] = Dict(1=>(T[1:3,1:3]*Roffset, T[1:3,4]))
     end
     # push!(kpts_all, kpts_test)
     # push!(gt_all, gt_test)
@@ -82,9 +88,6 @@ end
 file = matopen("data/nocs/mug/shapes_mug43.mat")
 shapes = read(file, "shapes") # 3 x N x K
 close(file)
-
-# create problem
-prob = FastPACE.Problem(size(shapes,2), size(shapes,3), 0.05, 0.2, shapes)
 
 # solve!
 if !isempty(methods_to_run)
@@ -101,14 +104,23 @@ if !isempty(methods_to_run)
 
         for frame in sort(collect(keys(kpts_test)))
             y = kpts_test[frame][1]
+            
+            # remove occluded points (0 depth)
+            shapes_adj = shapes[:, y[3,:] .!= 0,:]
+            y = y[:,y[3,:] .!= 0]
+            if size(y,2) < 3
+                # skip frame
+                continue
+            end
+            # create problem
+            prob = FastPACE.Problem(size(shapes_adj,2), size(shapes_adj,3), 0.05, 0.2, shapes_adj)
 
             for method in methods_to_run
                 if method == "SCF"
-                    out = @timed gnc(prob, y, λ, solvePACE_SCF; cbar2 = 0.01, μUpdate = 1.4)
+                    out = @timed gnc(prob, y, λ, solvePACE_SCF; cbar2 = 0.005, μUpdate = 1.4)
                     soln, inliers, success = out.value
-                    # Main.@infiltrate
                 elseif method == "GN"
-                    out = @timed gnc(prob, y, λ, solvePACE_GN; cbar2 = 0.01, μUpdate = 1.4)
+                    out = @timed gnc(prob, y, λ, solvePACE_GN; cbar2 = 0.005, μUpdate = 1.4)
                     soln, inliers, success = out.value
                 else
                     error("Method $method not implemented.")
@@ -125,7 +137,6 @@ if !isempty(methods_to_run)
                 print("$frame ")
             end
         end
-        break # TEMP
     end
 
     # save
@@ -153,11 +164,13 @@ for (i,method) in enumerate(methods)
         println("$method:")
         @printf "R error: %.1f°, t error: %.1f mm\n" mean(errR) mean(errp)*1000
         @printf "R error: %.1f°, t error: %.1f mm (%d successful frames)\n" mean(errR[gnc_success.(frames)]) mean(errp[gnc_success.(frames)])*1000 sum(gnc_success.(frames))
-        # Plots.violin!(ones(length(frames))*i,times.(frames),label=method)
-        Plots.boxplot!(repeat([jsonnum],length(frames)), times.(frames), label=(jsonnum==1) ? method : false, c=i)#, side=(i == 1) ? :left : :right)
-
-        break # TEMP
+        # these errors are going to be large: we estimate shape & pose, 
+        # so pose error is not a great metric! see certifiable tracking for a little bit better version
+        
+        # Plots.violin!(repeat([jsonnum],length(frames)),times.(frames), side=(i == 1) ? :left : :right, c=i, label=(jsonnum==1) ? method : false)
+        Plots.boxplot!(repeat([jsonnum+ 0.2*(i-1)],length(frames)), times.(frames), label=(jsonnum==1) ? method : false, c=i, notch=true)
     end
 end
 Plots.plot!(ylabel="Time (s)")#, ylims=(0,0.2))
+Plots.plot!(ylims=(0,0.05))
 time_plot
