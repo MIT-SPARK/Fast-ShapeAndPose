@@ -92,6 +92,8 @@ if !isempty(methods_to_run)
             e, time, iter, status = runlocaliter(data, solvePACE_SCF; certify=false, max_iters = 100, q0=q0)
         elseif method == "SCFopt"
             e, time, iter, status = runlocaliter(data, solvePACE_SCF; certify=true, max_iters = 100, q0=q0)
+        else
+            error("Method $method not implemented.")
         end
 
         errors[method] = e

@@ -19,6 +19,7 @@ function gnc(prob, y, λ, solver; maxiterations=100, stopthresh=1e-6, μUpdate=1
     success = false
     μ = 0.05
 
+    total_iters = maxiterations
     for iter in 1:maxiterations
         # termination conditions
         if Δcost < stopthresh
@@ -26,12 +27,14 @@ function gnc(prob, y, λ, solver; maxiterations=100, stopthresh=1e-6, μUpdate=1
                 @printf "GNC converged %3.2e < %3.2e.\n" Δcost stopthresh
             end
             success = true
+            total_iters = iter
             break
         end
         if maximum(abs.(weights)) < 1e-6
             if debug
                 printstyled("GNC encounters numerical issues.\n", color=:red)
             end
+            total_iters = iter
             break
         end
 
@@ -73,7 +76,7 @@ function gnc(prob, y, λ, solver; maxiterations=100, stopthresh=1e-6, μUpdate=1
 
     # return inliers + solution
     inliers = collect(1:prob.N)[last_weights .> 1e-6]
-    return soln, inliers, success
+    return soln, inliers, success, total_iters
 
 end
 

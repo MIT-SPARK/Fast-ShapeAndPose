@@ -15,6 +15,7 @@ using Serialization
 using Printf
 import Plots
 using StatsPlots
+using Random
 
 using SimpleRotations
 
@@ -36,7 +37,7 @@ parsed_args = parse_args(ARGS, s)
 methods = parsed_args["method"]
 methods = isa(methods, Vector) ? methods : [methods]
 if methods[1] == "all"
-    methods = ["SCF", "GN"]
+    methods = ["SCFopt", "SCF", "GN", "LM", "SDP", "Manopt"]
 end
 methods_to_run = []
 if parsed_args["force"]
@@ -74,29 +75,44 @@ prob = FastPACE.Problem(size(shapes,2), size(shapes,3), 0.05, 0.2, shapes)
 
 # solve!
 if !isempty(methods_to_run)
+    Random.seed!(0)
     λ = 0.
 
-    times = Dict(Pair.(methods_to_run, [Dict() for i in methods_to_run]))
-    gnc_success = Dict(Pair.(methods_to_run, [Dict() for i in methods_to_run]))
-    solns = Dict(Pair.(methods_to_run, [Dict() for i in methods_to_run]))
+    times_all = Dict(Pair.(methods_to_run, [Dict() for i in methods_to_run]))
+    gnc_success_all = Dict(Pair.(methods_to_run, [Dict() for i in methods_to_run]))
+    gnc_iters = Dict(Pair.(methods_to_run, [Dict() for i in methods_to_run]))
+    solns_all = Dict(Pair.(methods_to_run, [Dict() for i in methods_to_run]))
     for frame in sort(collect(keys(kpts_test)))
         y = kpts_test[frame][1]
 
         for method in methods_to_run
-            if method == "SCF"
-                out = @timed gnc(prob, y, λ, solvePACE_SCF; cbar2 = 0.005, μUpdate = 1.4) # 0.005 is good
-                soln, inliers, success = out.value
+            if method == "SDP"
+                out = @timed gnc(prob, y, λ, solvePACE_SDP; cbar2 = 0.005, μUpdate = 1.4)
+                soln, inliers, success, iters = out.value
+            elseif method == "Manopt"
+                out = @timed gnc(prob, y, λ, solvePACE_Manopt; cbar2 = 0.005, μUpdate = 1.4)
+                soln, inliers, success, iters = out.value
             elseif method == "GN"
-                out = @timed gnc(prob, y, λ, solvePACE_GN; cbar2 = 0.005, μUpdate = 1.4) # 0.005 is good
-                soln, inliers, success = out.value
+                out = @timed gnc(prob, y, λ, solvePACE_GN; cbar2 = 0.005, μUpdate = 1.4)
+                soln, inliers, success, iters = out.value
+            elseif method == "LM"
+                out = @timed gnc(prob, y, λ, solvePACE_GN; λ_lm=0.1, cbar2 = 0.005, μUpdate = 1.4)
+                soln, inliers, success, iters = out.value
+            elseif method == "SCF"
+                out = @timed gnc(prob, y, λ, solvePACE_SCF; certify=false, cbar2 = 0.005, μUpdate = 1.4)
+                soln, inliers, success, iters = out.value
+            elseif method == "SCFopt"
+                out = @timed gnc(prob, y, λ, solvePACE_SCF; certify=true, cbar2 = 0.005, μUpdate = 1.4)
+                soln, inliers, success, iters = out.value
             else
                 error("Method $method not implemented.")
             end
 
-            gnc_success[method][frame] = success
+            gnc_success_all[method][frame] = success
+            gnc_iters[method][frame] = iters
             time_dif = out.time - out.compile_time
-            times[method][frame] = time_dif
-            solns[method][frame] = soln
+            times_all[method][frame] = time_dif
+            solns_all[method][frame] = soln
         end
        
 
@@ -107,11 +123,41 @@ if !isempty(methods_to_run)
 
     # save
     for method in methods_to_run
-        serialize("data/cast/$method.dat", Dict("times"=>times[method], "gnc_success"=>gnc_success[method], "solns"=>solns[method]))
+        serialize("data/cast/$method.dat", Dict("times"=>times_all[method], "gnc_success"=>gnc_success_all[method], 
+                                            "solns"=>solns_all[method], "gnc_iters"=>gnc_iters[method]))
     end
+    println("")
 end
 
-# visualize!
+
+# load data
+using DataFrames, TexTables
+using Statistics
+df = DataFrame(method=String[], frame=Int[], errR=Float64[], errp=Float64[], time=Float64[], success=Bool[], gnc_iters=Int[])
+for method in methods
+    data = deserialize("data/cast/$method.dat")
+    solns = data["solns"]
+    frames = Int.(sort(collect(keys(solns))))
+
+
+    errR = [roterror(solns[frame].R, gt_test[frame][1][1]) for frame in frames]
+    errp = [norm(solns[frame].p - gt_test[frame][1][2]) for frame in frames]
+
+    df_new = DataFrame(method=repeat([method],length(frames)), frame=frames, 
+                        time=data["times"].(frames), success=data["gnc_success"].(frames), 
+                        errR=errR, errp=errp, gnc_iters=data["gnc_iters"].(frames))
+    global df = vcat(df, df_new)
+end
+
+# table of results
+# convert to ms
+df.time *= 1000
+df_s = subset(df, :success => g -> g.==true)
+tab_cast = summarize_by(df_s, :method, [:time, :errR, :gnc_iters], stats=("Mean"=> x->mean(x), "p90"=> x->quantile(x,.9)))
+# to_tex(tab_cast) |>print
+display(tab_cast)
+
+# print stats and visualize
 time_plot = Plots.plot()
 for (i,method) in enumerate(methods)
     data = deserialize("data/cast/$method.dat")
@@ -132,3 +178,5 @@ for (i,method) in enumerate(methods)
 end
 Plots.plot!(ylims=(0,0.02), ylabel="Time (s)")
 time_plot
+
+# TODO: table with columns: mean, p90, Rerr (mean)
