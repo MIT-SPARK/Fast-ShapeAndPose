@@ -6,16 +6,16 @@ import JSON
 using Glob
 
 parentimg = "/home/lorenzo/research/playground/catkeypoints"
-imgframe = 13+3
+imgframe = 183
 
 # load data
-det_files = glob("data/nocs/mug/*.json")
-det_file = det_files[1]
+det_files = glob("data/nocs/mug/scene_*.json")
+det_file = det_files[6]
 dets = JSON.parsefile(det_file)
 y = convert.(Float64,reduce(hcat, dets[imgframe]["est_pixel_keypoints"]))
 img_name = dets[imgframe]["rgb_image_filename"]
 
-inliers = [3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
+inliers = [1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
 
 # plot image
 img = Images.load(parentimg*"/"*img_name)
@@ -45,16 +45,20 @@ function plot_frame!(plt, pose, K; gt=false)
     o2d = project(origin)
     a2d = [project(p) for p in axes]
 
-    colors = [:red, :green, :blue]
+    if gt
+        colors = [:darkred, :darkgreen, :darkblue]
+    else
+        colors = [:red, :green3, :blue]
+    end
     for (a, c) in zip(a2d, colors)
-        Plots.plot!(plt, [o2d[1], a[1]], [o2d[2], a[2]], color=c, lw=gt ? 2 : 1, legend=false)
+        Plots.plot!(plt, [o2d[1], a[1]], [o2d[2], a[2]], color=c, lw=gt ? 3 : 1.5, legend=false)
     end
     return plt
 end
 # ground truth
 # T = convert.(Float64, reduce(hcat, dets[imgframe]["gt_pose"]))'
 # pose = (T[1:3,1:3], T[1:3,4])
-pose = gt_all["scene_1-mug_daniel_norm.json"][imgframe][1]
+pose = gt_all[split(det_file,"/")[end]][imgframe][1]
 plot_frame!(plt, pose, K; gt=true)
 
 # pose estimate

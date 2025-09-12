@@ -58,7 +58,7 @@ end
 
 ## load data
 # load keypoint data
-det_files = glob("data/nocs/mug/*.json")
+det_files = glob("data/nocs/mug/scene_*.json")
 kpts_all = Dict()
 gt_all = Dict()
 for file in det_files
@@ -119,6 +119,9 @@ if !isempty(methods_to_run)
                 if method == "SCF"
                     out = @timed gnc(prob, y, λ, solvePACE_SCF; cbar2 = 0.005, μUpdate = 1.4)
                     soln, inliers, success = out.value
+                    if (frame == 183) && (id == 6)
+                        println(inliers)
+                    end
                 elseif method == "GN"
                     out = @timed gnc(prob, y, λ, solvePACE_GN; cbar2 = 0.005, μUpdate = 1.4)
                     soln, inliers, success = out.value
@@ -143,8 +146,24 @@ if !isempty(methods_to_run)
     for method in methods_to_run
         save_dict = Dict("times"=>times[method], "gnc_success"=>gnc_success[method], "solns"=>solns[method])
         serialize("data/nocs/$(parsed_args["object"])/$method.dat", save_dict)
+
+        # save just solns in JSON format
+        solns_json = Dict()
+        for key in keys(solns[method])
+            key2 = split(key,".")[1]
+            solns_json[key2] = Dict{Int,Any}()
+            for frame in keys(solns[method][key])
+                solns_json[key2][frame] = Dict("p"=>vec(solns[method][key][frame].p), 
+                    "R"=>vec(solns[method][key][frame].R), "c"=>vec(solns[method][key][frame].c))
+            end
+        end
+        open("data/nocs/$(parsed_args["object"])/$method.json","w") do f
+            JSON.print(f, solns_json)
+        end
     end
 end
+
+normalize_frames = [-1,-1,-1,-1,-1,-1]  # pick a frame to normalize by
 
 # visualize!
 time_plot = Plots.plot()
@@ -158,8 +177,27 @@ for (i,method) in enumerate(methods)
         solns = data["solns"][json]
         frames = keys(solns)
 
-        errR = [roterror(solns[frame].R, project2SO3(gt_all[json][frame][1][1])) for frame in frames]
-        errp = [norm(solns[frame].p - gt_all[json][frame][1][2]) for frame in frames]
+        if normalize_frames[jsonnum] > 0
+            normalize_frame = normalize_frames[jsonnum]
+            gt_norm  = [project2SO3(gt_all[json][normalize_frame][1][1])  gt_all[json][normalize_frame][1][2]; 0 0 0 1]
+            est_norm = [solns[normalize_frame].R  solns[normalize_frame].p; 0 0 0 1]
+            diff = est_norm*inv(gt_norm)
+            
+            errR = zeros(length(frames))
+            errp = zeros(length(frames))
+            for (i,frame) in enumerate(frames)
+                T_diff = diff*[gt_all[json][frame][1][1]  gt_all[json][frame][1][2]; 0 0 0 1]
+                gtR = T_diff[1:3,1:3]
+                gtp = T_diff[1:3,4]
+                
+                errR[i] = roterror(solns[frame].R, gtR)
+                errp[i] = norm(solns[frame].p - gtp)
+            end
+        else
+            errR = [roterror(solns[frame].R, project2SO3(gt_all[json][frame][1][1])) for frame in frames]
+            errp = [norm(solns[frame].p - gt_all[json][frame][1][2]) for frame in frames]
+        end
+
 
         println("$method:")
         @printf "R error: %.1f°, t error: %.1f mm\n" mean(errR) mean(errp)*1000

@@ -167,7 +167,7 @@ if parsed_args["method"] == "all"
     
     # certificate percentages (SDP vs SCFopt)
     println("Certificate:")
-    for idxσ in [1,4]
+    for idxσ in 1:5#[1,4]
         df_SCFopt = subset(df, :K => k -> k .== 4, :σm => s -> s .== σms[idxσ], :method => m -> m .== "SCFopt")
         certified_SCFopt = sum(df_SCFopt[:,:certs] .== FastPACE.GLOBAL_CERTIFIED)
         df_SDP = subset(df, :K => k -> k .== 4, :σm => s -> s .== σms[idxσ], :method => m -> m .== "SDP")
