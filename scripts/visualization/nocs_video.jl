@@ -1,21 +1,28 @@
 ## View NOCS keypoints for debugging
+# run NOCS first!
 # Lorenzo Shaikewitz, 9/4/2025
 
+using Serialization
 import Images
 import JSON
 import Plots
 using Glob
+using FastPACE
 
 parentimg = "/home/lorenzo/research/playground/catkeypoints"
 
 # load data
+object = "mug"
+save_video = "data/nocs1_tim.mp4"
+video_id = 1
+
 K = [591.0125 0. 322.525; 0 590.165 244.11084; 0 0 1]
-data = deserialize("data/nocs/mug/SCF.dat")
-det_files = glob("data/nocs/mug/scene_*.json")
-det_file = det_files[6]
+data = deserialize("data/nocs/$object/SCF.dat")
+det_files = glob("data/nocs/$object/scene_*.json")
+det_file = det_files[video_id]
 dets = JSON.parsefile(det_file)
 
-normalize_by = 70 # pick a frame to normalize by (TODO)
+# normalize_by = 70 # pick a frame to normalize by (TODO)
 
 
 anim = Plots.@animate for imgframe in sort(collect(keys(data["solns"][split(det_file,"/")[end]])))
@@ -70,4 +77,4 @@ anim = Plots.@animate for imgframe in sort(collect(keys(data["solns"][split(det_
 end
 
 println("\nSaving...")
-Plots.gif(anim, "data/nocs6.mp4", fps=15)
+Plots.gif(anim, save_video, fps=15)

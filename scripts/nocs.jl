@@ -32,12 +32,13 @@ s = ArgParseSettings()
         default = "all"
     "object"
         help = "object to test on: mug, laptop, etc."
-        default = "mug"
+        default = "mug_tim"
 end
 parsed_args = parse_args(ARGS, s)
 # parsed_args["force"] = true
 
 # don't re-run methods unless force has been called
+object = parsed_args["object"]
 methods = parsed_args["method"]
 methods = isa(methods, Vector) ? methods : [methods]
 if methods[1] == "all"
@@ -48,8 +49,8 @@ if parsed_args["force"]
     methods_to_run = methods
 else
     for m in methods
-        if isfile("data/nocs/$(parsed_args["object"])/$m.dat")
-            println("Using data in `data/nocs/$(parsed_args["object"])` for $m.")
+        if isfile("data/nocs/$object/$m.dat")
+            println("Using data in `data/nocs/$object` for $m.")
         else
             push!(methods_to_run, m)
         end
@@ -58,7 +59,7 @@ end
 
 ## load data
 # load keypoint data
-det_files = glob("data/nocs/mug/scene_*.json")
+det_files = glob("data/nocs/$object/scene_*.json")
 kpts_all = Dict()
 gt_all = Dict()
 for file in det_files
@@ -85,7 +86,7 @@ for file in det_files
 end
 
 # CAD frame
-file = matopen("data/nocs/mug/shapes_mug43.mat")
+file = matopen("data/nocs/$object/shapes.mat")
 shapes = read(file, "shapes") # 3 x N x K
 close(file)
 
