@@ -32,7 +32,7 @@ s = ArgParseSettings()
         default = "all"
     "object"
         help = "object to test on: mug, laptop, etc."
-        default = "mug_tim"
+        default = "mug"
 end
 parsed_args = parse_args(ARGS, s)
 # parsed_args["force"] = true
