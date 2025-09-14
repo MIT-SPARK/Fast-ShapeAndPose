@@ -99,22 +99,22 @@ if !isempty(methods_to_run)
 
             for method in methods_to_run
                 if method == "SDP"
-                    out = @timed gnc(prob, y, λ, solvePACE_SDP; cbar2 = 0.15, μUpdate = 1.4)
+                    out = @timed gnc(prob, y, λ, solvePACE_SDP; cbar2 = 0.175, μUpdate = 1.4)
                     soln, inliers, success, iters = out.value
                 elseif method == "Manopt"
-                    out = @timed gnc(prob, y, λ, solvePACE_Manopt; cbar2 = 0.15, μUpdate = 1.4)
+                    out = @timed gnc(prob, y, λ, solvePACE_Manopt; cbar2 = 0.175, μUpdate = 1.4)
                     soln, inliers, success, iters = out.value
                 elseif method == "GN"
-                    out = @timed gnc(prob, y, λ, solvePACE_GN; cbar2 = 0.15, μUpdate = 1.4)
+                    out = @timed gnc(prob, y, λ, solvePACE_GN; cbar2 = 0.175, μUpdate = 1.4)
                     soln, inliers, success, iters = out.value
                 elseif method == "LM"
-                    out = @timed gnc(prob, y, λ, solvePACE_GN; λ_lm=0.1, cbar2 = 0.15, μUpdate = 1.4)
+                    out = @timed gnc(prob, y, λ, solvePACE_GN; λ_lm=0.1, cbar2 = 0.175, μUpdate = 1.4)
                     soln, inliers, success, iters = out.value
                 elseif method == "SCF"
-                    out = @timed gnc(prob, y, λ, solvePACE_SCF; certify=false, cbar2 = 0.2, μUpdate = 1.4)
+                    out = @timed gnc(prob, y, λ, solvePACE_SCF; certify=false, cbar2 = 0.175, μUpdate = 1.4)
                     soln, inliers, success, iters = out.value
                 elseif method == "SCFopt"
-                    out = @timed gnc(prob, y, λ, solvePACE_SCF; certify=true, cbar2 = 0.15, μUpdate = 1.4)
+                    out = @timed gnc(prob, y, λ, solvePACE_SCF; certify=true, cbar2 = 0.175, μUpdate = 1.4)
                     soln, inliers, success, iters = out.value
                 else
                     error("Method $method not implemented.")
@@ -141,18 +141,18 @@ if !isempty(methods_to_run)
                                             "solns"=>solns_all[method], "gnc_iters"=>gnc_iters[method]))
 
         # save just solns in JSON format (TODO fix for this JSON)
-        # solns_json = Dict()
-        # for key in keys(solns[method])
-        #     key2 = split(key,".")[1]
-        #     solns_json[key2] = Dict{Int,Any}()
-        #     for frame in keys(solns[method][key])
-        #         solns_json[key2][frame] = Dict("p"=>vec(solns[method][key][frame].p), 
-        #             "R"=>vec(solns[method][key][frame].R), "c"=>vec(solns[method][key][frame].c))
-        #     end
-        # end
-        # open("data/apolloscape/$method.json","w") do f
-        #     JSON.print(f, solns_json)
-        # end
+        solns = solns_all[method]
+        solns_json = Dict()
+        for car_name in keys(solns)
+            solns_json[car_name] = Dict()
+            for frame in keys(solns[car_name])
+                solns_json[car_name][frame] = Dict("p"=>vec(solns[car_name][frame].p), 
+                    "R"=>vec(solns[car_name][frame].R), "c"=>vec(solns[car_name][frame].c))
+            end
+        end
+        open("data/apolloscape/$method.json","w") do f
+            JSON.print(f, solns_json)
+        end
     end
     println("")
 end
