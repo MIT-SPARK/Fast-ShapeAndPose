@@ -9,10 +9,10 @@ import Plots
 using Glob
 using FastPACE
 
-parentimg = "/home/lorenzo/research/playground/catkeypoints"
+parentimg = "/home/lorenzo/research/playground/catkeypoints/"#*"NOCS/real_test/scene_1/"
 
 # load data
-object = "mug"
+object = "mug"#_tim"
 save_video = "data/nocs1_tim.mp4"
 video_id = 1
 

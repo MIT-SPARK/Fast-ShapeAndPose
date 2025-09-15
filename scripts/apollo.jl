@@ -24,7 +24,7 @@ s = ArgParseSettings()
         action = :store_true
     "method"
         help = "method to run: SCF, GN, or all. Can call multiple like [SCF,GN] (no spaces)"
-        default = "all"
+        default = "SCF" # TODO: ALLL
 end
 parsed_args = parse_args(ARGS, s)
 # parsed_args["force"] = true

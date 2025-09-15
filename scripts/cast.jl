@@ -76,7 +76,7 @@ prob = FastPACE.Problem(size(shapes,2), size(shapes,3), 0.05, 0.2, shapes)
 # solve!
 if !isempty(methods_to_run)
     Random.seed!(0)
-    λ = 0.
+    λ = 0.1
 
     times_all = Dict(Pair.(methods_to_run, [Dict() for i in methods_to_run]))
     gnc_success_all = Dict(Pair.(methods_to_run, [Dict() for i in methods_to_run]))
