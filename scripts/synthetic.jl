@@ -152,12 +152,20 @@ if parsed_args["method"] == "all"
     for (idxσ,σm) in enumerate(σms)
         for m in methods_to_plot
             n = length(errors[m][1][idxσ])
-            append!(boxdata, errors[m][1][idxσ])
+            append!(boxdata, errors[m][1][idxσ]) # rotation errors
             append!(mdata, repeat([m], n))
-            append!(σdata, repeat([round((σms[idxσ] / r),digits=2)], n))
+            append!(σdata, repeat([round((σm / r),digits=2)], n))
         end
+        
+        # boxplot of positive certificates (SCF only)
+        df_SCFcertified = subset(df, :K => k -> k .== 4, :σm => s -> s .== σm, :method => m -> m .== "SCFopt", :certs => c -> c .== FastPACE.GLOBAL_CERTIFIED)
+        e = df_SCFcertified[:,:errR]
+        n = length(e)
+        append!(boxdata, e) # rotation errors
+        append!(mdata, repeat(["SCF2"], n))
+        append!(σdata, repeat([round((σm / r),digits=2)], n))
     end
-    plot_box = groupedboxplot(σdata, boxdata; group=mdata, msw=0., fillalpha=0.75, linecolor=["#007ecc" "#d84c1f" "#338740"], ms=1.5)
+    plot_box = groupedboxplot(σdata, boxdata; group=mdata, msw=0., fillalpha=0.75, linecolor=["#007ecc" "#d84c1f" "#8b0000" "#338740"], fillcolor=[1 2 "#8b0001" 3], markercolor=[1 2 "#8b0000" 3],ms=1.5)
     # Plots.plot!(ylabel = "Rotation Error (log deg)", xlabel="Measurement Noise Scale", yscale=:log10)
     Plots.plot!(yscale=:log10)
     Plots.plot!(dpi=300, fontfamily="Helvetica")

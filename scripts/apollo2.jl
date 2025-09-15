@@ -172,7 +172,7 @@ for (i,method) in enumerate(methods)
     errR = reduce(vcat, errR)
     errp = [[norm(solns[img_name][car_num].p - gt_all[img_name][car_num][2]) for car_num in 1:length(solns[img_name])] for img_name in keys(solns)]
     errp = reduce(vcat, errp)
-    errc = [[argmax(solns[img_name][car_num].c)[1] == gt_all[img_name][car_num][3] for car_num in 1:length(solns[img_name])] for img_name in keys(solns)]
+    errc = [[argmax(solns[img_name][car_num].c)[1]-1 == gt_all[img_name][car_num][3] for car_num in 1:length(solns[img_name])] for img_name in keys(solns)]
     errc = reduce(vcat, errc)
 
     times_dict = data["times"]
