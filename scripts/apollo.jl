@@ -16,6 +16,8 @@ using SimpleRotations
 
 using FastPACE
 
+error("DO NOT USE THIS SCRIPT, IT IS OLD")
+
 ## Command-line arguments
 s = ArgParseSettings()
 @add_arg_table s begin
