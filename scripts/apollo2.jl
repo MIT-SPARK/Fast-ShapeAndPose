@@ -50,18 +50,23 @@ end
 
 ## load data
 # load keypoint data
-dets = JSON.parsefile("data/apolloscape2/detections.json")
+# dets = JSON.parsefile("data/apolloscape2/detections.json")
+dets = JSON.parsefile("data/apolloscape2/robin_detections.json")
 
 kpts_all = Dict()
 gt_all = Dict()
+robin_all = Dict()
 for (img_name,dets_img) in dets
     kpts_all[img_name] = []
     gt_all[img_name] = []
+    robin_all[img_name] = []
     for d in dets_img
         push!(kpts_all[img_name], convert.(Float64, reduce(hcat,d["est_world_keypoints"]))') # [m]
         T = convert.(Float64,reduce(hcat,d["gt_pose"]))'
         gt_shape = Int(d["car_id"])
         push!(gt_all[img_name], (project2SO3(T[1:3,1:3]), T[1:3,4], gt_shape))
+        # robin
+        push!(robin_all[img_name], Dict("time"=>d["robin_time"], "inliers"=>d["robin_inliers"]))
     end
 end
 
@@ -94,9 +99,25 @@ if !isempty(methods_to_run)
     print("Running $(length(img_names)) frames...")
     for (i, img_name) in enumerate(img_names)
         for (car_num, y) in enumerate(kpts_all[img_name])
-            # remove occluded points (0 depth)
-            shapes_adj = shapes[:, (y[3,:] .!= 0) .&& (y[3,:] .!= Inf),:]
-            y = y[:,(y[3,:] .!= 0) .&& (y[3,:] .!= Inf)]
+
+            # remove robin points
+            points_filter = (y[3,:] .!= 0) .&& (y[3,:] .!= Inf)
+            use_robin = false
+            if length(robin_all[img_name][car_num]["inliers"]) > 0
+                robin_filter = zeros(Bool, size(y,2))
+                robin_filter[robin_all[img_name][car_num]["inliers"] .+ 1] .= true
+                if sum(points_filter .&& robin_filter) >= 3
+                    # actually use robin
+                    points_filter = points_filter .&& robin_filter
+                    use_robin = true
+                else
+                    # Main.@infiltrate
+                end
+            end
+
+            # remove occluded / outlier points
+            shapes_adj = shapes[:, points_filter,:]
+            y = y[:,points_filter]
             if size(y,2) < 3
                 # skip frame
                 continue
@@ -130,6 +151,10 @@ if !isempty(methods_to_run)
                 gnc_success_all[method][img_name][car_num] = success
                 gnc_iters[method][img_name][car_num] = iters
                 time_dif = out.time - out.compile_time
+                # add ROBIN time
+                if use_robin
+                    time_dif += robin_all[img_name][car_num]["time"]
+                end
                 times_all[method][img_name][car_num] = time_dif
                 solns_all[method][img_name][car_num] = soln
             end

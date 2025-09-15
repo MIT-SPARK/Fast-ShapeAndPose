@@ -15,6 +15,10 @@ for (i,obj) in enumerate(dets)
     shapes[:,:,i] = shape
 end
 
-# file = matopen("data/nocs/laptop_tim/shapes.mat")
-matwrite("data/nocs/laptop_tim/shapes.mat", Dict("shapes"=>shapes))
-# close(file)
+# # file = matopen("data/nocs/laptop_tim/shapes.mat")
+# matwrite("data/nocs/laptop_tim/shapes.mat", Dict("shapes"=>shapes))
+# # close(file)
+
+file = matopen("data/nocs/laptop_tim/shapes.mat", "w")
+write(file, "shapes", shapes)
+close(file)
