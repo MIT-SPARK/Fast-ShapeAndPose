@@ -37,7 +37,7 @@ parsed_args = parse_args(ARGS, s)
 methods = parsed_args["method"]
 methods = isa(methods, Vector) ? methods : [methods]
 if methods[1] == "all"
-    methods = ["SCFopt", "SCF", "GN", "LM", "SDP", "Manopt"]
+    methods = ["SCF", "GN", "LM", "Manopt", "SCFopt", "SDP"]
 end
 methods_to_run = []
 if parsed_args["force"]
@@ -53,15 +53,20 @@ else
 end
 
 # load keypoint data
-dets = JSON.parsefile("data/cast/cast.json")
+# dets = JSON.parsefile("data/cast/cast.json")
+dets = JSON.parsefile("data/cast/robin_cast.json")
 camK = convert.(Float64,reduce(hcat,dets[1]["K_mat"])')
 
 kpts_test = Dict()
 gt_test = Dict()
+robin_test = Dict()
 for (i,d) in enumerate(dets)
     kpts_test[i] = Dict(1=>convert.(Float64,reduce(hcat,d["est_world_keypoints"])) ./ 1000.)
     T = convert.(Float64,reduce(hcat,d["gt_teaser_pose"]))'
     gt_test[i] = Dict(1=>(T[1:3,1:3], T[1:3,4]/1000.))
+
+    # robin
+    robin_test[i] = Dict("time"=>d["robin_time"], "inliers"=>d["robin_inliers"])
 end
 
 # load CAD frame
@@ -70,7 +75,7 @@ shapes = read(file, "shapes") # 3 x N x K
 close(file)
 
 # create problem
-prob = FastPACE.Problem(size(shapes,2), size(shapes,3), 0.05, 0.2, shapes)
+# prob = FastPACE.Problem(size(shapes,2), size(shapes,3), 0.05, 0.2, shapes)
 
 
 # solve!
@@ -84,6 +89,24 @@ if !isempty(methods_to_run)
     solns_all = Dict(Pair.(methods_to_run, [Dict() for i in methods_to_run]))
     for frame in sort(collect(keys(kpts_test)))
         y = kpts_test[frame][1]
+
+        # remove ROBIN points
+        points_filter = (y[3,:] .!= 0)
+        if length(robin_test[frame]["inliers"]) > 0
+            robin_filter = zeros(Bool, size(y,2))
+            robin_filter[robin_test[frame]["inliers"] .+ 1] .= true
+            points_filter = points_filter .&& robin_filter
+        end
+
+        # remove occluded / outlier points
+        shapes_adj = shapes[:, points_filter,:]
+        y = y[:,points_filter]
+        if size(y,2) < 3
+            # skip frame
+            continue
+        end
+        # create problem
+        prob = FastPACE.Problem(size(shapes_adj,2), size(shapes_adj,3), 0.05, 0.2, shapes_adj)
 
         for method in methods_to_run
             if method == "SDP"
@@ -111,6 +134,8 @@ if !isempty(methods_to_run)
             gnc_success_all[method][frame] = success
             gnc_iters[method][frame] = iters
             time_dif = out.time - out.compile_time
+            # add ROBIN time
+            time_dif += robin_test[frame]["time"]
             times_all[method][frame] = time_dif
             solns_all[method][frame] = soln
         end

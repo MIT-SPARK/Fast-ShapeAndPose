@@ -9,16 +9,16 @@ import Plots
 using Glob
 using FastPACE
 
-parentimg = "/home/lorenzo/research/playground/catkeypoints/"#*"NOCS/real_test/scene_1/"
+parentimg = "/home/lorenzo/research/playground/catkeypoints/"*"NOCS/real_test/scene_1/"
 
 # load data
-object = "mug"#_tim"
-save_video = "data/nocs1_tim.mp4"
+object = "laptop_tim"#_tim"
+save_video = "data/nocs2_tim.mp4"
 video_id = 1
 
 K = [591.0125 0. 322.525; 0 590.165 244.11084; 0 0 1]
 data = deserialize("data/nocs/$object/SCF.dat")
-det_files = glob("data/nocs/$object/scene_*.json")
+det_files = glob("data/nocs/$object/robin_scene_*.json")
 det_file = det_files[video_id]
 dets = JSON.parsefile(det_file)
 

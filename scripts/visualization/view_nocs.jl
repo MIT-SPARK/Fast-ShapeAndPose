@@ -9,7 +9,7 @@ parentimg = "/home/lorenzo/research/playground/catkeypoints"
 imgframe = 183
 
 # load data
-det_files = glob("data/nocs/mug/scene_*.json")
+det_files = glob("data/nocs/mug/robin_scene_*.json")
 det_file = det_files[6]
 dets = JSON.parsefile(det_file)
 y = convert.(Float64,reduce(hcat, dets[imgframe]["est_pixel_keypoints"]))

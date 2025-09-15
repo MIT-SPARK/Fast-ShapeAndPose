@@ -78,6 +78,7 @@ for file in det_files
         # fix the ground truth (to align models)
         # rotate R by 90 deg about x axis
         Roffset = axang2rotm([1.;0;0],-π/2)
+        # Roffset = diagm(ones(3))
 
         gt_test[i] = Dict(1=>(project2SO3(T[1:3,1:3])*Roffset, T[1:3,4]))
 

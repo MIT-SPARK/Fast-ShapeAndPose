@@ -1,5 +1,6 @@
 using JSON
 using MAT
+using glob
 
 dets = JSON.parsefile("/home/lorenzo/Downloads/laptop-1/laptop-1/scene_1-laptop-every_category_keypoints.json")
 dets = dets[1]
@@ -22,3 +23,21 @@ end
 file = matopen("data/nocs/laptop_tim/shapes.mat", "w")
 write(file, "shapes", shapes)
 close(file)
+
+# to count
+bottle_ct = 0
+camera_ct = 0
+mug_ct = 0
+laptop_ct = 0
+nocs_loc = "/home/lorenzo/research/playground/catkeypoints/NOCS/real_test"
+for folder in readdir(nocs_loc)
+    for meta in glob("*_meta.txt",nocs_loc*"/"*folder)
+        lines = readlines(meta)
+        lines = reduce(hcat, split.(lines, " "))
+        ids = parse.(Int,lines[2,:])
+        global bottle_ct += sum(ids .== 1)
+        global camera_ct += sum(ids .== 3)
+        global mug_ct += sum(ids .== 6)
+        global laptop_ct += sum(ids .== 5)
+    end
+end
