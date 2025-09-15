@@ -42,7 +42,7 @@ object = parsed_args["object"]
 methods = parsed_args["method"]
 methods = isa(methods, Vector) ? methods : [methods]
 if methods[1] == "all"
-    methods = ["SCFopt", "SCF", "GN", "LM", "SDP", "Manopt"]
+    methods = ["SCF", "GN", "LM", "Manopt", "SCFopt", "SDP"]
 end
 methods_to_run = []
 if parsed_args["force"]
@@ -110,13 +110,22 @@ if !isempty(methods_to_run)
         println("\n-----$json ($(length(keys(kpts_all[json]))) frames)-----")
         kpts_test = kpts_all[json]
         gt_test = gt_all[json]
+        robin_test = robin_all[json]
 
         for frame in sort(collect(keys(kpts_test)))
             y = kpts_test[frame][1]
             
-            # remove occluded points (0 depth)
-            shapes_adj = shapes[:, y[3,:] .!= 0,:]
-            y = y[:,y[3,:] .!= 0]
+            # remove robin points
+            points_filter = (y[3,:] .!= 0)
+            if length(robin_test[frame]["inliers"]) > 0
+                robin_filter = zeros(Bool, size(y,2))
+                robin_filter[robin_test[frame]["inliers"] .+ 1] .= true
+                points_filter = points_filter .&& robin_filter
+            end
+
+            # remove occluded / outlier points
+            shapes_adj = shapes[:, points_filter,:]
+            y = y[:,points_filter]
             if size(y,2) < 3
                 # skip frame
                 continue
@@ -147,11 +156,11 @@ if !isempty(methods_to_run)
                     error("Method $method not implemented.")
                 end
 
-                time_dif += 
-
                 gnc_success[method][json][frame] = success
                 gnc_iters[method][json][frame] = iters
                 time_dif = out.time - out.compile_time
+                # add ROBIN time
+                time_dif += robin_test[frame]["time"]
                 times[method][json][frame] = time_dif
                 solns[method][json][frame] = soln
             end
@@ -187,6 +196,12 @@ end
 
 normalize_frames = [-1,-1,-1,-1,-1,-1]  # pick a frame to normalize by
 
+R_perturb = diagm(ones(3))
+# if object == "camera"
+#     println("Using perturbation!")
+#     R_perturb = project2SO3([0.9999563966163845 -0.0009024000466379273 -0.009294651157040201; 0.0007795913020592626 0.9999124666630083 -0.013207999443500179; 0.009305756464522641 0.01320017750083563 0.9998695705993703])
+# end
+
 # visualize!
 time_plot = Plots.plot()
 jsons = sort(collect(keys(kpts_all)))
@@ -194,7 +209,7 @@ for (i,method) in enumerate(methods)
     data = deserialize("data/nocs/$(parsed_args["object"])/$method.dat")
     solns = data["solns"]
 
-    errR = [[roterror(solns[key1][key2].R, gt_all[key1][key2][1][1]) for key2 in keys(solns[key1])] for key1 in keys(solns)]
+    errR = [[roterror(R_perturb'*solns[key1][key2].R, gt_all[key1][key2][1][1]) for key2 in keys(solns[key1])] for key1 in keys(solns)]
     errR = reduce(vcat, errR)
     errp = [[norm(solns[key1][key2].p - gt_all[key1][key2][1][2]) for key2 in keys(solns[key1])] for key1 in keys(solns)]
     errp = reduce(vcat, errp)
@@ -206,13 +221,19 @@ for (i,method) in enumerate(methods)
     gnc_iters = reduce(vcat,collect.(values.(values(gnc_dict))))
 
     println("-----$method-----")
-    println("5deg5cm: $(sum((errR .<= 5) .&& (errp .< 0.05))/length(errR)*100)")
-    println("R error: $(mean(errR[errp .< 0.1])) deg (<0.1m)")
-    println("p error: $(mean(errp[errp .< 0.1])) m (<0.1m)")
-    println("GNC iters: $(mean(gnc_iters))")
-    println("Time: $(mean(times))")
+    @printf "5deg5cm: %.1f%%\n" (sum((errR .<= 5) .&& (errp .< 0.05))/length(errR)*100)
+    @printf "Rerr: %.1f deg (<0.1m)\n" (mean(errR[errp .< 0.1]))
+    @printf "perr: %.1f cm  (<0.1m)\n" (mean(errp[errp .< 0.1])*100)
+    @printf "GNCi: %.1f\n" (mean(gnc_iters))
+    @printf "Time: %.2f ms\n" (mean(times)*1000)
 
-    # for json in jsons
+    
+    # to get approx rot transform:
+    # difR = [[solns[key1][key2].R*gt_all[key1][key2][1][1]' for key2 in keys(solns[key1])] for key1 in keys(solns)]
+    # difR = reduce(vcat, difR)
+    # R_perturb2 = project2SO3(mean(difR[errR .< 15]))
+    # println(R_perturb2)
+    # break
 
         
 
