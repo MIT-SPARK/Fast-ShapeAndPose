@@ -228,57 +228,59 @@ for (i,method) in enumerate(methods)
     @printf "GNCi: %.1f\n" (mean(gnc_iters))
     @printf "Time: %.2f ms\n" (mean(times)*1000)
 
-    
-    # to get approx rot transform:
-    # difR = [[solns[key1][key2].R*gt_all[key1][key2][1][1]' for key2 in keys(solns[key1])] for key1 in keys(solns)]
-    # difR = reduce(vcat, difR)
-    # R_perturb2 = project2SO3(mean(difR[errR .< 15]))
-    # println(R_perturb2)
-    # break
-
-        
-
-
-
-    # for (jsonnum,json) in enumerate(jsons)
-    #     println("\n-----$json ($(length(keys(data["times"][json]))) frames)-----")
-    #     times = data["times"][json]
-    #     gnc_success = data["gnc_success"][json]
-    #     solns = data["solns"][json]
-    #     frames = keys(solns)
-
-    #     if normalize_frames[jsonnum] > 0
-    #         normalize_frame = normalize_frames[jsonnum]
-    #         gt_norm  = [project2SO3(gt_all[json][normalize_frame][1][1])  gt_all[json][normalize_frame][1][2]; 0 0 0 1]
-    #         est_norm = [solns[normalize_frame].R  solns[normalize_frame].p; 0 0 0 1]
-    #         diff = est_norm*inv(gt_norm)
-            
-    #         errR = zeros(length(frames))
-    #         errp = zeros(length(frames))
-    #         for (i,frame) in enumerate(frames)
-    #             T_diff = diff*[gt_all[json][frame][1][1]  gt_all[json][frame][1][2]; 0 0 0 1]
-    #             gtR = T_diff[1:3,1:3]
-    #             gtp = T_diff[1:3,4]
-                
-    #             errR[i] = roterror(solns[frame].R, gtR)
-    #             errp[i] = norm(solns[frame].p - gtp)
-    #         end
-    #     else
-    #         errR = [roterror(solns[frame].R, project2SO3(gt_all[json][frame][1][1])) for frame in frames]
-    #         errp = [norm(solns[frame].p - gt_all[json][frame][1][2]) for frame in frames]
-    #     end
-
-
-    #     println("$method:")
-    #     @printf "R error: %.1f°, t error: %.1f mm\n" mean(errR) mean(errp)*1000
-    #     @printf "R error: %.1f°, t error: %.1f mm (%d successful frames)\n" mean(errR[gnc_success.(frames)]) mean(errp[gnc_success.(frames)])*1000 sum(gnc_success.(frames))
-    #     # these errors are going to be large: we estimate shape & pose, 
-    #     # so pose error is not a great metric! see certifiable tracking for a little bit better version
-        
-    #     # Plots.violin!(repeat([jsonnum],length(frames)),times.(frames), side=(i == 1) ? :left : :right, c=i, label=(jsonnum==1) ? method : false)
-    #     Plots.boxplot!(repeat([jsonnum+ 0.2*(i-1)],length(frames)), times.(frames), label=(jsonnum==1) ? method : false, c=i, notch=true)
-    # end
 end
-# Plots.plot!(ylabel="Time (s)")#, ylims=(0,0.2))
-# Plots.plot!(ylims=(0,0.05))
-# time_plot
+
+## VERSION WITH APPROX TRANSFORM
+# this controls for shape alignment issues
+# we select one frame and normalize our poses based on that frame.
+println("Transformed results:")
+solns_scf = deserialize("data/nocs/$(parsed_args["object"])/SCF.dat")["solns"]
+
+for (i,method) in enumerate(methods)
+    data = deserialize("data/nocs/$(parsed_args["object"])/$method.dat")
+    solns = data["solns"]
+
+    errR = []
+    errp = []
+    for video in keys(solns)
+        if occursin("canon_len", video)
+            video_ref = "robin_scene_4-camera_canon_len_norm.json"
+            frame = 123
+        elseif occursin("canon_wo", video)
+            video_ref = "robin_scene_5-camera_canon_wo_len_norm.json"
+            frame = 242
+        elseif occursin("shengjun", video)
+            video_ref = "robin_scene_2-camera_shengjun_norm.json"
+            frame = 448
+        elseif occursin("mug_brown", video)
+            video_ref = "robin_scene_6-mug_brown_starbucks_norm.json"
+            frame = 103
+        elseif occursin("anastasia", video)
+            video_ref = "robin_scene_6-mug_anastasia_norm.json"
+            frame = 166
+        elseif occursin("mug_daniel", video)
+            video_ref = "robin_scene_2-mug_daniel_norm.json"
+            frame = 365
+        end
+        T1 = [solns_scf[video_ref][frame].R solns_scf[video_ref][frame].p; 0 0 0 1.]
+        T2 = [gt_all[video_ref][frame][1][1] gt_all[video_ref][frame][1][2]; 0 0 0 1.]
+
+        T_dif = T2*inv(T1)
+        R_dif = T_dif[1:3,1:3]
+        p_dif = T_dif[1:3,4]
+
+        errR_video = [roterror(R_dif*solns[video][key2].R, gt_all[video][key2][1][1]) for key2 in keys(solns[video])]
+        # errp_video = [norm((R_dif*solns[video][key2].p + p_dif) - gt_all[video][key2][1][2]) for key2 in keys(solns[video])]
+        errp_video = [norm(solns[video][key2].p - gt_all[video][key2][1][2]) for key2 in keys(solns[video])]
+
+
+        # println((sum((errR_video .<= 5) .&& (errp_video .< 0.05))/length(errR_video)*100))
+        append!(errR, errR_video)
+        append!(errp, errp_video)
+    end
+    println("-----$method-----")
+    # 2615 for mug, 2561 for camera
+    @printf "5deg5cm: %.1f%%\n" (sum((errR .<= 5) .&& (errp .< 0.05))*100 / 2615)#length(errR))
+    @printf "Rerr: %.1f deg (<0.1m)\n" (mean(errR[errp .< 0.1]))
+    @printf "perr: %.1f cm  (<0.1m)\n" (mean(errp[errp .< 0.1])*100)
+end

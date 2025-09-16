@@ -33,7 +33,7 @@ parsed_args = parse_args(ARGS, s)
 methods = parsed_args["method"]
 methods = isa(methods, Vector) ? methods : [methods]
 if methods[1] == "all"
-    methods = ["SCFopt", "SCF", "GN", "LM", "SDP", "Manopt"]
+    methods = ["SCF", "GN", "LM", "Manopt", "SCFopt", "SDP"]
 end
 methods_to_run = []
 if parsed_args["force"]
@@ -87,8 +87,8 @@ shapes = cat([reduce(hcat,v)' for v in shapes_dict.(keys_shapes)]..., dims=3) # 
 # solve!
 if !isempty(methods_to_run)
     Random.seed!(0)
-    λ = 1500.
-    # λ = 1.5
+    # λ = 1500.
+    λ = 15000.
 
     img_names = collect(keys(kpts_all))
 
@@ -139,7 +139,7 @@ if !isempty(methods_to_run)
                     out = @timed gnc(prob, y, λ, solvePACE_GN; λ_lm=0.1, cbar2 = 0.15, μUpdate = 1.4)
                     soln, inliers, success, iters = out.value
                 elseif method == "SCF"
-                    out = @timed gnc(prob, y, λ, solvePACE_SCF; certify=false, cbar2 = 0.15, μUpdate = 1.4, max_iters=250)
+                    out = @timed gnc(prob, y, λ, solvePACE_SCF; certify=false, cbar2 = 0.15, μUpdate = 1.4, max_iters=100)
                     soln, inliers, success, iters = out.value
                 elseif method == "SCFopt"
                     out = @timed gnc(prob, y, λ, solvePACE_SCF; certify=true, cbar2 = 0.15, μUpdate = 1.4, max_iters=250)
@@ -199,6 +199,7 @@ for (i,method) in enumerate(methods)
     errp = reduce(vcat, errp)
     errc = [[argmax(solns[img_name][car_num].c)[1]-1 == gt_all[img_name][car_num][3] for car_num in 1:length(solns[img_name])] for img_name in keys(solns)]
     errc = reduce(vcat, errc)
+    Main.@infiltrate
 
     times_dict = data["times"]
     times = reduce(vcat,collect.(values.(values(times_dict))))
@@ -207,9 +208,14 @@ for (i,method) in enumerate(methods)
     gnc_iters = reduce(vcat,collect.(values.(values(gnc_dict))))
 
     println("-----$method-----")
-    println("R error: $(mean(errR)) deg")
-    println("p error: $(mean(errp)) m")
+    @printf "Rerr: %.1f deg\n" (mean(errR))
+    @printf "perr: %.1f cm\n" (mean(errp)*100)
     println("c error: $(sum(errc) / length(errc) * 100) %")
-    println("GNC iters: $(mean(gnc_iters))")
-    println("Time: $(mean(times))")
+    @printf "GNCi: %.1f\n" (mean(gnc_iters))
+    @printf "Time: %.2f ms\n" (mean(times)*1000)
+    # println("R error: $(mean(errR)) deg")
+    # println("p error: $(mean(errp)) m")
+    # println("c error: $(sum(errc) / length(errc) * 100) %")
+    # println("GNC iters: $(mean(gnc_iters))")
+    # println("Time: $(mean(times))")
 end

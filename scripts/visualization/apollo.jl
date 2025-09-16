@@ -1,41 +1,22 @@
-## View NOCS keypoints for debugging
+## Apollo mask
 # Lorenzo Shaikewitz, 9/4/2025
 
 import Images
 import GeometryBasics
 import FileIO
 import JSON
-using Glob
+using JSON
 
-parentimg = "/home/lorenzo/research/playground/catkeypoints"
-imgframe = 38
+parentimg = "/home/lorenzo/Downloads/apolloscape/car-instance/3d-car-understanding-train/train/images/"
+img_name = "180116_042406961_Camera_5"
+id = 1
 
-object = "mug"
-
-# load data
-det_files = glob("data/nocs/$object/robin_scene_*.json")
-det_file = det_files[3]
-dets = JSON.parsefile(det_file)
-y = convert.(Float64,reduce(hcat, dets[imgframe]["est_pixel_keypoints"]))
-img_name = dets[imgframe]["rgb_image_filename"]
-
-inliers = [1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
 
 # plot image
-img = Images.load(parentimg*"/"*img_name)
+img = Images.load(parentimg*"/"*img_name*".jpg")
 plt = Plots.plot(img, axis=false, grid=false, title="$img_name")
 
-# plot keypoints
-# for (idx, kpt) = enumerate(eachcol(y))
-#     u = Int(round(kpt[2]))
-#     v = Int(round(kpt[1]))
-#     Plots.scatter!(plt, [v], [u], ms=1, label=false, c=:gold, msw=0)
-#     if idx in inliers
-#         Plots.scatter!(plt, [v], [u], ms=1, label=false, c=:blue, msw=0)
-#     end
-# end
-
-K = [591.0125 0. 322.525; 0 590.165 244.11084; 0 0 1]
+K = [2304.5479 0. 1686.2379; 0 2305.8757 1354.9849; 0 0 1]
 
 function plot_frame!(plt, pose, K; gt=false)
     R = pose[1]
@@ -59,19 +40,19 @@ function plot_frame!(plt, pose, K; gt=false)
     end
     return plt
 end
-# ground truth
-# T = convert.(Float64, reduce(hcat, dets[imgframe]["gt_pose"]))'
-# pose = (T[1:3,1:3], T[1:3,4])
 
-pose = gt_all[split(det_file,"/")[end]][imgframe][1]
-Roffset = axang2rotm([1.;0;0],-π/2)
-pose = (pose[1]*Roffset', pose[2])
-# plot_frame!(plt, pose, K; gt=true)
+R_fix = axang2rotm([0;0;1], π)#*axang2rotm([0;1;0], π)
+
+pose_gt = gt_all[img_name][id]
+c_gt = pose_gt[3]
+pose_gt = (pose_gt[1]*R_fix, pose_gt[2])
 
 # pose estimate
-data = deserialize("data/nocs/$object/SCF.dat")
-soln = data["solns"][split(det_file,"/")[end]][imgframe]
+data = deserialize("data/apolloscape2/SCF.dat")
+soln = data["solns"][img_name][id]
 # plot_frame!(plt,(soln.R, soln.p), K; gt=false)
+
+
 
 # 3D plot of keypoints?
 # y2 = convert.(Float64,reduce(hcat, dets[imgframe]["est_world_keypoints"]))
@@ -154,6 +135,7 @@ function get_mask(img, R, t, cad_m, camK)
                 end
             end
         end
+        print("$i ")
     end
     return mask
 end
@@ -174,11 +156,7 @@ function get_lazy_mask(img, R, t, cad_m, camK)
     return mask
 end
 
-function plot_mask!(plt, img, cadpath, pose, camK; lazy=true)
-    # load CAD
-    cad = FileIO.load(cadpath)
-    cad_m = GeometryBasics.Mesh(GeometryBasics.coordinates(cad), cad.faces)
-
+function plot_mask!(plt, img, cad_m, pose, camK; lazy=true)
     R = pose[1]
     t = pose[2]
     if lazy
@@ -190,7 +168,8 @@ function plot_mask!(plt, img, cadpath, pose, camK; lazy=true)
     end
     img_mask = Images.RGBA.(copy(img)).*0
     # img_mask[mask] .= Images.RGBA(0,1,1, 0.5)
-    img_mask[mask] .= Images.RGBA(1,0.5,0, 0.5)
+    # img_mask[mask] .= Images.RGBA(1,0.5,0, 0.5)
+    img_mask[mask] .= Images.RGBA(1,0,1, 0.5)
     Plots.plot!(img_mask, grid=false, axis=false)
     return plt, mask
 end
@@ -201,7 +180,7 @@ Plot outline of object on image.
 function plot_outline!(plt, img, cadpath, object_id, pose, camK)
     # get segmentation mask
     cad = FileIO.load(cadpath*(@sprintf "obj_%06d.ply" object_id))
-    cad_m = GeometryBasics.Mesh(GeometryBasics.coordinates(cad)/1000, cad.faces)
+    cad_m = GeometryBasics.Mesh(GeometryBasics.coordinates(cad), cad.faces)
 
     seg = get_mask(img, pose[1], pose[2], cad_m, camK)
     plot_outline!(plt, img, seg)
@@ -234,12 +213,15 @@ function boundary_map(seg::BitMatrix)
     return b
 end
 
-# cadpath = "data/nocs/mug/mug_anastasia_norm.obj"
-# cadpath = "data/nocs/mug/mug_daniel_norm.obj"
-cadpath = "data/nocs/mug/mug_brown_starbucks_norm.obj"
-# cadpath = "data/nocs/camera/camera_canon_wo_len_norm.obj"
-camK = K
-(plt, seg) = plot_mask!(plt, img, cadpath, (soln.R*Roffset', soln.p), K; lazy=false)
-# (plt, seg) = plot_mask!(plt, img, cadpath, pose, K; lazy=true)
-plot_outline!(plt, img, seg)
+cadpath = "data/apolloscape2/037-CAR02.json"
+cad2 = JSON.parsefile(cadpath)
+
+faces = GeometryBasics.GLTriangleFace.(cad2["faces"])
+vertices = GeometryBasics.Point{3, Float32}.(cad2["vertices"])
+
+cad_m = GeometryBasics.Mesh(vertices, faces)
+
+(plt, seg) = plot_mask!(plt, img, cad_m, (soln.R*R_fix, soln.p), K; lazy=false)
+# (plt, seg) = plot_mask!(plt, img, cad_m, pose_gt, K; lazy=true)
+# plot_outline!(plt, img, seg)
 plt

@@ -9,12 +9,12 @@ import Plots
 using Glob
 using FastPACE
 
-parentimg = "/home/lorenzo/research/playground/catkeypoints/"*"NOCS/real_test/scene_1/"
+parentimg = "/home/lorenzo/research/playground/catkeypoints/"#*"NOCS/real_test/scene_1/"
 
 # load data
-object = "laptop_tim"#_tim"
-save_video = "data/nocs2_tim.mp4"
-video_id = 1
+object = "camera"#_tim"
+save_video = "data/nocs2_cam.mp4"
+video_id = 3
 
 K = [591.0125 0. 322.525; 0 590.165 244.11084; 0 0 1]
 data = deserialize("data/nocs/$object/SCF.dat")

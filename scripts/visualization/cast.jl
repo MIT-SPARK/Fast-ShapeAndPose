@@ -1,4 +1,5 @@
-## View NOCS keypoints for debugging
+## CAST mask
+# NOT WORKING RIGHT NOW
 # Lorenzo Shaikewitz, 9/4/2025
 
 import Images
@@ -7,7 +8,7 @@ import FileIO
 import JSON
 using Glob
 
-parentimg = "/home/lorenzo/research/playground/catkeypoints"
+parentimg = "/home/lorenzo/research/tracking/datasets/racecar_offline/slow"
 imgframe = 38
 
 object = "mug"
