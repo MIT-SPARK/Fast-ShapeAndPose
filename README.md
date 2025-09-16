@@ -1,10 +1,22 @@
-# Sub-Millisecond Solutions to Category-Level Shape and Pose Estimation
+# Category-Level Shape and Pose Estimation in Less Than a Millisecond
 [[Paper](TODO)] [[Video](TODO)]
 
-Official Julia implementation of "A Sub-Millisecond Solver for Category-Level Object Shape and Pose Estimation"
+Official Julia implementation of "Category-Level Object Shape and Pose Estimation in Less Than a Millisecond"
 by Lorenzo Shaikewitz, Tim Nguyen, and Luca Carlone
 
-**TODO: nice figure / animation here (see my website)**
+<div class="row">
+    <div class="column" style="width: 33.33%; float: left;">
+        <img src="assets/scf_oneiter.gif" alt="One iteration of SCF">
+    </div>
+    <div class="column" style="width: 33.33%; float: left;">
+        <img src="assets/scf_onemin.gif" alt="One iteration of SCF">
+    </div>
+    <div class="column" style="width: 33.33%; float: left;">
+        <img src="assets/scf_twomins.gif" alt="One iteration of SCF">
+    </div>
+</div><br>
+
+This repository contains the *solver*. We open-source keypoint detection and training [here]().
 
 ## Quick Start
 TODO:
