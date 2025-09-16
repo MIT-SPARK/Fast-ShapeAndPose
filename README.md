@@ -4,17 +4,10 @@
 Official Julia implementation of "Category-Level Object Shape and Pose Estimation in Less Than a Millisecond"
 by Lorenzo Shaikewitz, Tim Nguyen, and Luca Carlone
 
-<div class="row">
-    <div class="column" style="width: 45%; float: left;">
-        <img src="assets/scf_oneiter.gif" alt="One iteration of SCF">
-    </div>
-    <!-- <div class="column" style="width: 33.33%; float: left;">
-        <img src="assets/scf_onemin.gif" alt="One iteration of SCF">
-    </div> -->
-    <div class="column" style="width: 45%; float: left;">
-        <img src="assets/scf_twomins.gif" alt="One iteration of SCF">
-    </div>
-</div><br>
+  One Run                  |  Multiple Minima
+:-------------------------:|:-------------------------:
+![](assets/scf_oneiter.gif)|![](assets/scf_twomins.gif)
+
 
 This repository contains the *solver*. We open-source keypoint detection and training [here]().
 
