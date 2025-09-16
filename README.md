@@ -12,8 +12,34 @@ by Lorenzo Shaikewitz, Tim Nguyen, and Luca Carlone
 This repository contains the *solver*. We open-source keypoint detection and training [here]().
 
 ## Quick Start
+First, make sure you have [Julia installed](https://julialang.org/install/). This repository was tested with v1.11.6. Then, clone the repository and follow the directions below. We assume you are in the folder repo.
+1. Clone this repository
+```shell
+git clone https://github.com/lopenguin/nepv.git
+cd nepv
+```
+2. Manually install custom dependencies:
+```shell
+julia --project
+using Pkg
+Pkg.add("https://github.com/lopenguin/SimpleRotations.jl")
+Pkg.add("https://github.com/lopenguin/TSSOS")
+Pkg.instantiate()
+```
+TODO: TEST THIS
+
+At this point, you can run the solver by calling:
+```shell
+julia --project scripts/demo_pace.jl
+```
+Or in the Julia 
+```julia [...]
+Test
+```
+
+
 TODO:
-- Data folder
+- Data folder (for reproducing results!)
 - Julia environment
 
 ## Reproducing Results
@@ -51,3 +77,6 @@ LINK TO PRETRAINED WEIGHTS IS BROKEN
 
 
 ## BibTeX
+```
+@misc{Coming soon!}
+```
