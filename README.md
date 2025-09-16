@@ -5,13 +5,13 @@ Official Julia implementation of "Category-Level Object Shape and Pose Estimatio
 by Lorenzo Shaikewitz, Tim Nguyen, and Luca Carlone
 
 <div class="row">
-    <div class="column" style="width: 33.33%; float: left;">
+    <div class="column" style="width: 45%; float: left;">
         <img src="assets/scf_oneiter.gif" alt="One iteration of SCF">
     </div>
-    <div class="column" style="width: 33.33%; float: left;">
+    <!-- <div class="column" style="width: 33.33%; float: left;">
         <img src="assets/scf_onemin.gif" alt="One iteration of SCF">
-    </div>
-    <div class="column" style="width: 33.33%; float: left;">
+    </div> -->
+    <div class="column" style="width: 45%; float: left;">
         <img src="assets/scf_twomins.gif" alt="One iteration of SCF">
     </div>
 </div><br>
