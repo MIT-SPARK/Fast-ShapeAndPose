@@ -32,9 +32,9 @@ At this point, you can run the solver by calling:
 ```shell
 julia --project scripts/demo_pace.jl
 ```
-Or in the Julia 
-```julia [...]
-Test
+Or in the Julia REPL
+```julia-repl
+julia> include("scripts/demo_pace.jl")
 ```
 
 
