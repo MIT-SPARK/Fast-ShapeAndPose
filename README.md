@@ -18,23 +18,25 @@ First, make sure you have [Julia installed](https://julialang.org/install/). Thi
 git clone https://github.com/lopenguin/nepv.git
 cd nepv
 ```
-2. Manually install custom dependencies:
+2. Open the Julia REPL
 ```shell
 julia --project
+```
+3. Install dependencies
+```julia-repl
 using Pkg
-Pkg.add("https://github.com/lopenguin/SimpleRotations.jl")
-Pkg.add("https://github.com/lopenguin/TSSOS")
-Pkg.instantiate()
+Pkg.add(url="https://github.com/lopenguin/SimpleRotations.jl")
 ```
-TODO: TEST THIS
 
-At this point, you can run the solver by calling:
-```shell
-julia --project scripts/demo_pace.jl
-```
-Or in the Julia REPL
+That's it! You can now run the demo script:
 ```julia-repl
 julia> include("scripts/demo_pace.jl")
+julia> # command line: julia --project scripts/demo_pace.jl
+```
+
+You can also run this script from the command line:
+```shell
+julia --project scripts/demo_pace.jl
 ```
 
 
