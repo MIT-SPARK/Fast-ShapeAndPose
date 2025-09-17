@@ -93,3 +93,12 @@ function runlocaliter(data, solver; kwargs...)
     end
     return errors, runtimes, iters, statuses
 end
+
+# projecting quaternions to 3D
+function proj_quat(q)
+    q_proj = q[2:end]
+    if q[1] < 0
+        q_proj = -q_proj
+    end
+    return q_proj
+end

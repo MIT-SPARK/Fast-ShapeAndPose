@@ -29,7 +29,7 @@ include("baseline_solvers.jl")
 export solvePACE_SDP, solvePACE_Manopt, solvePACE_GN
 
 include("run_synthetic.jl")
-export gendata, runlocal, runlocaliter
+export gendata, runlocal, runlocaliter, proj_quat
 
 include("gnc.jl")
 export gnc, gnc_wrapper

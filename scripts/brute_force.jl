@@ -1,4 +1,4 @@
-## Demonstrate SCF on PACE
+## Goal: use only GNC in the case of no known correspondences
 # Lorenzo Shaikewitz, 6/26/2025
 
 using Printf
