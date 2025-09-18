@@ -1,64 +1,93 @@
-## Apollo mask
-# run apollo2 first
+## View NOCS keypoints for debugging
+# you have to run nocs.jl first
 # Lorenzo Shaikewitz, 9/4/2025
 
 import Images
 import GeometryBasics
 import FileIO
 import JSON
-using JSON
+using Serialization
+using Glob
+using FastPACE
+import Plots
+using SimpleRotations
+using Printf
+using LinearAlgebra
 
-parentimg = "/home/lorenzo/Downloads/apolloscape/car-instance/3d-car-understanding-train/train/images/"
-img_name = "180116_042406961_Camera_5"
-id = 1
+parentimg = "/home/lorenzo/research/playground/catkeypoints"
+object = "camera"
+save_dir = "data/nocs_video4"
 
+# load data
+det_files = glob("data/nocs/$object/robin_scene_*.json")
+det_file = det_files[5]
+dets = JSON.parsefile(det_file)
+data = deserialize("data/nocs/$object/SCF.dat")
 
-# plot image
-img = Images.load(parentimg*"/"*img_name*".jpg")
-plt = Plots.plot(img, axis=false, grid=false, title="$img_name")
+# cadpath = "data/nocs/mug/mug_anastasia_norm.obj"
+# cadpath = "data/nocs/mug/mug_daniel_norm.obj"
+# cadpath = "data/nocs/mug/mug_brown_starbucks_norm.obj"
+cadpath = "data/nocs/camera/camera_canon_wo_len_norm.obj"
 
-K = [2304.5479 0. 1686.2379; 0 2305.8757 1354.9849; 0 0 1]
+kpts_all = Dict()
+gt_all = Dict()
+robin_all = Dict()
+Roffset = axang2rotm([1.;0;0],-π/2)
+for file in det_files
+    dets = JSON.parsefile(file)
 
-function plot_frame!(plt, pose, K; gt=false)
-    R = pose[1]
-    t = pose[2]
+    kpts_test = Dict()
+    gt_test = Dict()
+    robin_test = Dict()
+    for (i,d) in enumerate(dets)
+        kpts_test[i] = Dict(1=>convert.(Float64,reduce(hcat, d["est_world_keypoints"]))) # [m]
+        T = convert.(Float64, reduce(hcat, d["gt_pose"]))'
+        # gt_test[i] = Dict(1=>(T[1:3,1:3], T[1:3,4]))
 
-    origin = t
-    axes   = [t + 0.1*R[:,i] for i in 1:3]  # x, y, z axes in world
+        # fix the ground truth (to align models)
+        # rotate R by 90 deg about x axis
+        # Roffset = diagm(ones(3))
 
-    # project to image
-    project(p) = (K * (p))[1:2] ./ (K * (p))[3]
-    o2d = project(origin)
-    a2d = [project(p) for p in axes]
+        gt_test[i] = Dict(1=>(project2SO3(T[1:3,1:3]), T[1:3,4]))
 
-    if gt
-        colors = [:darkred, :darkgreen, :darkblue]
-    else
-        colors = [:red, :green3, :blue]
+        # robin
+        robin_test[i] = Dict("time"=>d["robin_time"], "inliers"=>d["robin_inliers"])
     end
-    for (a, c) in zip(a2d, colors)
-        Plots.plot!(plt, [o2d[1], a[1]], [o2d[2], a[2]], color=c, lw=gt ? 3 : 1.5, legend=false)
-    end
-    return plt
+    # push!(kpts_all, kpts_test)
+    # push!(gt_all, gt_test)
+    json = split(file,"/")[end]
+    kpts_all[json] = kpts_test
+    gt_all[json] = gt_test
+    robin_all[json] = robin_test
 end
 
-R_fix = axang2rotm([0;0;1], π)#*axang2rotm([0;1;0], π)
 
-pose_gt = gt_all[img_name][id]
-c_gt = pose_gt[3]
-pose_gt = (pose_gt[1]*R_fix, pose_gt[2])
+if occursin("canon_len", cadpath)
+    video_ref = "robin_scene_4-camera_canon_len_norm.json"
+    frame_ref = 123
+elseif occursin("canon_wo", cadpath)
+    video_ref = "robin_scene_5-camera_canon_wo_len_norm.json"
+    frame_ref = 242
+elseif occursin("shengjun", cadpath)
+    video_ref = "robin_scene_2-camera_shengjun_norm.json"
+    frame_ref = 448
+elseif occursin("mug_brown", cadpath)
+    video_ref = "robin_scene_6-mug_brown_starbucks_norm.json"
+    frame_ref = 103
+elseif occursin("anastasia", cadpath)
+    video_ref = "robin_scene_6-mug_anastasia_norm.json"
+    frame_ref = 166
+elseif occursin("mug_daniel", cadpath)
+    video_ref = "robin_scene_2-mug_daniel_norm.json"
+    frame_ref = 365
+end
+T1 = [data["solns"][video_ref][frame_ref].R data["solns"][video_ref][frame_ref].p; 0 0 0 1.]
+T2 = [gt_all[video_ref][frame_ref][1][1] gt_all[video_ref][frame_ref][1][2]; 0 0 0 1.]
 
-# pose estimate
-data = deserialize("data/apolloscape2/SCF.dat")
-soln = data["solns"][img_name][id]
-# plot_frame!(plt,(soln.R, soln.p), K; gt=false)
+T_dif = T2*inv(T1)
+R_dif = T_dif[1:3,1:3]
+p_dif = T_dif[1:3,4]
 
-
-
-# 3D plot of keypoints?
-# y2 = convert.(Float64,reduce(hcat, dets[imgframe]["est_world_keypoints"]))
-# y2 = y2[:,y2[3,:] .!= 0]
-# Plots.scatter(eachrow(y2)...)
 
 """
 Get segmentation mask by tracing object pose
@@ -136,7 +165,6 @@ function get_mask(img, R, t, cad_m, camK)
                 end
             end
         end
-        print("$i ")
     end
     return mask
 end
@@ -157,7 +185,11 @@ function get_lazy_mask(img, R, t, cad_m, camK)
     return mask
 end
 
-function plot_mask!(plt, img, cad_m, pose, camK; lazy=true)
+function plot_mask!(plt, img, cadpath, pose, camK; lazy=true)
+    # load CAD
+    cad = FileIO.load(cadpath)
+    cad_m = GeometryBasics.Mesh(GeometryBasics.coordinates(cad), cad.faces)
+
     R = pose[1]
     t = pose[2]
     if lazy
@@ -168,9 +200,8 @@ function plot_mask!(plt, img, cad_m, pose, camK; lazy=true)
         mask = get_mask(img, R, t, cad_m, camK)
     end
     img_mask = Images.RGBA.(copy(img)).*0
-    # img_mask[mask] .= Images.RGBA(0,1,1, 0.5)
+    img_mask[mask] .= Images.RGBA(0,1,1, 0.5)
     # img_mask[mask] .= Images.RGBA(1,0.5,0, 0.5)
-    img_mask[mask] .= Images.RGBA(1,0,1, 0.5)
     Plots.plot!(img_mask, grid=false, axis=false)
     return plt, mask
 end
@@ -181,7 +212,7 @@ Plot outline of object on image.
 function plot_outline!(plt, img, cadpath, object_id, pose, camK)
     # get segmentation mask
     cad = FileIO.load(cadpath*(@sprintf "obj_%06d.ply" object_id))
-    cad_m = GeometryBasics.Mesh(GeometryBasics.coordinates(cad), cad.faces)
+    cad_m = GeometryBasics.Mesh(GeometryBasics.coordinates(cad)/1000, cad.faces)
 
     seg = get_mask(img, pose[1], pose[2], cad_m, camK)
     plot_outline!(plt, img, seg)
@@ -191,8 +222,8 @@ end
 function plot_outline!(plt, img, seg)
     bound = boundary_map(BitMatrix(seg))
     img_new = Images.RGBA.(copy(img)).*0
-    # img_new[bound] .= Images.RGBA(0,0.5,0.5, 1.)
-    img_new[bound] .= Images.RGBA(0.5,0.25,0., 1.)
+    img_new[bound] .= Images.RGBA(0,0.5,0.5, 1.)
+    # img_new[bound] .= Images.RGBA(0.5,0.25,0., 1.)
     Plots.plot!(plt, img_new)
     return plt
 end
@@ -214,15 +245,43 @@ function boundary_map(seg::BitMatrix)
     return b
 end
 
-cadpath = "data/apolloscape2/037-CAR02.json"
-cad2 = JSON.parsefile(cadpath)
 
-faces = GeometryBasics.GLTriangleFace.(cad2["faces"])
-vertices = GeometryBasics.Point{3, Float32}.(cad2["vertices"])
 
-cad_m = GeometryBasics.Mesh(vertices, faces)
 
-(plt, seg) = plot_mask!(plt, img, cad_m, (soln.R*R_fix, soln.p), K; lazy=false)
-# (plt, seg) = plot_mask!(plt, img, cad_m, pose_gt, K; lazy=true)
-# plot_outline!(plt, img, seg)
-plt
+println("Starting $(length(keys(data["solns"][split(det_file,"/")[end]]))) frames...")
+
+for (i,imgframe) in enumerate(sort(collect(keys(data["solns"][split(det_file,"/")[end]]))))
+    
+    y = convert.(Float64,reduce(hcat, dets[imgframe]["est_pixel_keypoints"]))
+    img_name = dets[imgframe]["rgb_image_filename"]
+
+    # plot image
+    img = Images.load(parentimg*"/"*img_name)
+    plt = Plots.plot(img, axis=false, grid=false, title="$img_name")
+
+    # plot keypoints
+    for (idx, kpt) = enumerate(eachcol(y))
+        u = Int(round(kpt[2]))
+        v = Int(round(kpt[1]))
+        Plots.scatter!(plt, [v], [u], ms=1, label=false, c=:gold, msw=0)
+    end
+
+    K = [591.0125 0. 322.525; 0 590.165 244.11084; 0 0 1]
+
+    # ground truth
+    pose_gt = gt_all[split(det_file,"/")[end]][imgframe][1]
+
+    # pose estimate
+    soln = data["solns"][split(det_file,"/")[end]][imgframe]
+
+    # plot mask and outline
+    (plt, seg) = plot_mask!(plt, img, cadpath, (soln.R*Roffset', soln.p), K; lazy=false)
+    # (plt, seg) = plot_mask!(plt, img, cadpath, (R_dif*soln.R, R_dif*soln.p + p_dif), K; lazy=true)
+    # (plt, seg) = plot_mask!(plt, img, cadpath, pose_gt, K; lazy=true)
+    plot_outline!(plt, img, seg)
+
+    Plots.savefig(save_dir*"/$(imgframe).svg")
+
+    print("$i ")
+end
+

@@ -1,64 +1,51 @@
-## Apollo mask
-# run apollo2 first
+## View Apollo keypoints for debugging
+# you have to run nocs.jl first
 # Lorenzo Shaikewitz, 9/4/2025
 
 import Images
 import GeometryBasics
 import FileIO
 import JSON
-using JSON
+using Serialization
+using Glob
+using FastPACE
+import Plots
+using SimpleRotations
+using Printf
+using LinearAlgebra
 
 parentimg = "/home/lorenzo/Downloads/apolloscape/car-instance/3d-car-understanding-train/train/images/"
-img_name = "180116_042406961_Camera_5"
-id = 1
+object = "camera"
+save_dir = "data/apollo_video_estc"
 
+# load data
+dets = JSON.parsefile("data/apolloscape2/robin_detections.json")
+data = deserialize("data/apolloscape2/SCF.dat")
 
-# plot image
-img = Images.load(parentimg*"/"*img_name*".jpg")
-plt = Plots.plot(img, axis=false, grid=false, title="$img_name")
+id2name = JSON.parsefile("data/apolloscape2/car_ids.json")
+# ids = sort(parse.(Int,collect(keys(id2name))))
+# keys_shapes_car_names = id2name.(string.(ids))
 
-K = [2304.5479 0. 1686.2379; 0 2305.8757 1354.9849; 0 0 1]
-
-function plot_frame!(plt, pose, K; gt=false)
-    R = pose[1]
-    t = pose[2]
-
-    origin = t
-    axes   = [t + 0.1*R[:,i] for i in 1:3]  # x, y, z axes in world
-
-    # project to image
-    project(p) = (K * (p))[1:2] ./ (K * (p))[3]
-    o2d = project(origin)
-    a2d = [project(p) for p in axes]
-
-    if gt
-        colors = [:darkred, :darkgreen, :darkblue]
-    else
-        colors = [:red, :green3, :blue]
+kpts_all = Dict()
+gt_all = Dict()
+robin_all = Dict()
+for (img_name,dets_img) in dets
+    kpts_all[img_name] = []
+    gt_all[img_name] = []
+    robin_all[img_name] = []
+    for d in dets_img
+        push!(kpts_all[img_name], convert.(Float64, reduce(hcat,d["est_world_keypoints"]))') # [m]
+        T = convert.(Float64,reduce(hcat,d["gt_pose"]))'
+        gt_shape = Int(d["car_id"])
+        push!(gt_all[img_name], (project2SO3(T[1:3,1:3]), T[1:3,4], gt_shape))
+        # robin
+        push!(robin_all[img_name], Dict("time"=>d["robin_time"], "inliers"=>d["robin_inliers"]))
     end
-    for (a, c) in zip(a2d, colors)
-        Plots.plot!(plt, [o2d[1], a[1]], [o2d[2], a[2]], color=c, lw=gt ? 3 : 1.5, legend=false)
-    end
-    return plt
 end
 
+cadpaths = "/home/lorenzo/Downloads/apolloscape/pku-autonomous-driving/car_models_json/"
+
 R_fix = axang2rotm([0;0;1], π)#*axang2rotm([0;1;0], π)
-
-pose_gt = gt_all[img_name][id]
-c_gt = pose_gt[3]
-pose_gt = (pose_gt[1]*R_fix, pose_gt[2])
-
-# pose estimate
-data = deserialize("data/apolloscape2/SCF.dat")
-soln = data["solns"][img_name][id]
-# plot_frame!(plt,(soln.R, soln.p), K; gt=false)
-
-
-
-# 3D plot of keypoints?
-# y2 = convert.(Float64,reduce(hcat, dets[imgframe]["est_world_keypoints"]))
-# y2 = y2[:,y2[3,:] .!= 0]
-# Plots.scatter(eachrow(y2)...)
 
 """
 Get segmentation mask by tracing object pose
@@ -136,7 +123,6 @@ function get_mask(img, R, t, cad_m, camK)
                 end
             end
         end
-        print("$i ")
     end
     return mask
 end
@@ -181,7 +167,7 @@ Plot outline of object on image.
 function plot_outline!(plt, img, cadpath, object_id, pose, camK)
     # get segmentation mask
     cad = FileIO.load(cadpath*(@sprintf "obj_%06d.ply" object_id))
-    cad_m = GeometryBasics.Mesh(GeometryBasics.coordinates(cad), cad.faces)
+    cad_m = GeometryBasics.Mesh(GeometryBasics.coordinates(cad)/1000, cad.faces)
 
     seg = get_mask(img, pose[1], pose[2], cad_m, camK)
     plot_outline!(plt, img, seg)
@@ -191,8 +177,8 @@ end
 function plot_outline!(plt, img, seg)
     bound = boundary_map(BitMatrix(seg))
     img_new = Images.RGBA.(copy(img)).*0
-    # img_new[bound] .= Images.RGBA(0,0.5,0.5, 1.)
-    img_new[bound] .= Images.RGBA(0.5,0.25,0., 1.)
+    img_new[bound] .= Images.RGBA(0,0.5,0.5, 1.)
+    # img_new[bound] .= Images.RGBA(0.5,0.25,0., 1.)
     Plots.plot!(plt, img_new)
     return plt
 end
@@ -214,15 +200,61 @@ function boundary_map(seg::BitMatrix)
     return b
 end
 
-cadpath = "data/apolloscape2/037-CAR02.json"
-cad2 = JSON.parsefile(cadpath)
 
-faces = GeometryBasics.GLTriangleFace.(cad2["faces"])
-vertices = GeometryBasics.Point{3, Float32}.(cad2["vertices"])
+println("Starting $(length(collect(keys(data["solns"])))) frames...")
 
-cad_m = GeometryBasics.Mesh(vertices, faces)
 
-(plt, seg) = plot_mask!(plt, img, cad_m, (soln.R*R_fix, soln.p), K; lazy=false)
-# (plt, seg) = plot_mask!(plt, img, cad_m, pose_gt, K; lazy=true)
-# plot_outline!(plt, img, seg)
-plt
+K = [2304.5479 0. 1686.2379; 0 2305.8757 1354.9849; 0 0 1]
+K_scaled = [K[1:2,:] / 5; 0 0 1]
+
+for (i,img_name) in enumerate(sort(collect(keys(data["solns"]))))
+
+    # plot image
+    img = Images.load(parentimg*"/"*img_name*".jpg")
+    img = Images.imresize(img, ratio=1/5) # to make this tractable
+    plt = Plots.plot(img, axis=false, grid=false, title="$img_name")
+
+    solns_cur = data["solns"][img_name]
+    for id in 1:length(keys(data["solns"][img_name]))
+        # y = convert.(Float64,reduce(hcat, dets[img_name][id]["est_pixel_keypoints"])) ./ 5
+
+
+        # plot keypoints
+        # for (idx, kpt) = enumerate(eachcol(y))
+        #     u = Int(round(kpt[2]))
+        #     v = Int(round(kpt[1]))
+        #     Plots.scatter!(plt, [v], [u], ms=1, label=false, c=:gold, msw=0)
+        # end
+
+
+        # ground truth
+        pose_gt = gt_all[img_name][id]
+        # shape
+        # c_gt = pose_gt[3]
+        # cad = JSON.parsefile(cadpaths*"/$(id2name(string(c_gt))).json")
+        # faces = GeometryBasics.GLTriangleFace.(cad["faces"])
+        # vertices = GeometryBasics.Point{3, Float32}.(cad["vertices"])
+        # cad_m = GeometryBasics.Mesh(vertices, faces)
+        # pose
+        pose_gt = (pose_gt[1]*R_fix, pose_gt[2])
+
+        # pose estimate
+        soln = solns_cur[id]
+        c_est = argmax(soln.c[:,1]) - 1
+        cad = JSON.parsefile(cadpaths*"/$(id2name(string(c_est))).json")
+        faces = GeometryBasics.GLTriangleFace.(cad["faces"])
+        vertices = GeometryBasics.Point{3, Float32}.(cad["vertices"])
+        cad_m = GeometryBasics.Mesh(vertices, faces)
+
+        # plot mask and outline
+        (plt, seg) = plot_mask!(plt, img, cad_m, (soln.R*R_fix, soln.p), K_scaled; lazy=false)
+        # (plt, seg) = plot_mask!(plt, img, cad_m, pose_gt, K_scaled; lazy=false)
+        plot_outline!(plt, img, seg)
+
+    end
+
+    Plots.savefig(save_dir*"/$(img_name).svg")
+
+    print("$i ")
+end
+
