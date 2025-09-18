@@ -193,6 +193,17 @@ df.time *= 1000
 names = []
 tabs = []
 for idxσ in [1,4]
+    df_s = subset(df, :K => k -> k .== 25, :σm => s -> s .== σms[idxσ])
+    tab = summarize_by(df_s, :method, [:time], stats=("Mean (ms)"=> x->mean(x), "p90 (ms)"=> x->quantile(x,.9)))
+    push!(tabs, tab)
+    push!(names, "$(round((σms[idxσ] / r),digits=2))")
+end
+tab_times2 = join_table(Pair.(names,tabs)...)
+
+# TABLE: for K = 4
+names = []
+tabs = []
+for idxσ in [1,4]
     df_s = subset(df, :K => k -> k .== 4, :σm => s -> s .== σms[idxσ])
     tab = summarize_by(df_s, :method, [:time], stats=("Mean (ms)"=> x->mean(x), "p90 (ms)"=> x->quantile(x,.9)))
     push!(tabs, tab)
