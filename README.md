@@ -107,5 +107,13 @@ Unfortunately, most ApolloCar3D data is no longer available at their [official r
 
 ## BibTeX
 ```
-@misc{Coming soon!}
+@misc{Shaikewitz25arxiv-FastShapeAndPose,
+      title={Category-Level Object Shape and Pose Estimation in Less Than a Millisecond}, 
+      author={Lorenzo Shaikewitz and Tim Nguyen and Luca Carlone},
+      year={2025},
+      eprint={2509.18979},
+      archivePrefix={arXiv},
+      primaryClass={cs.RO},
+      url={https://arxiv.org/abs/2509.18979}, 
+}
 ```
