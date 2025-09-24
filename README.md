@@ -1,5 +1,5 @@
 # Category-Level Shape and Pose Estimation in Less Than a Millisecond
-[[Paper](TODO)] [[Video](TODO)]
+[[Paper](https://arxiv.org/abs/2509.18979)] [[Video](TODO)]
 
 Official Julia implementation of "Category-Level Object Shape and Pose Estimation in Less Than a Millisecond"
 by Lorenzo Shaikewitz, Tim Nguyen, and Luca Carlone
