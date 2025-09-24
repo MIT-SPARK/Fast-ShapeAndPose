@@ -12,7 +12,7 @@ by Lorenzo Shaikewitz, Tim Nguyen, and Luca Carlone
 This repository contains the *solver*. We open-source keypoint detection and training [here]().
 
 ## Quick Start
-First, make sure you have [Julia installed](https://julialang.org/install/). This repository was tested with v1.11.6. Then, clone the repository and follow the directions below. We assume you are in the folder repo.
+First, make sure you have [Julia installed](https://julialang.org/install/). This repository was tested with v1.11.6. Then, clone the repository and follow the directions below. We assume you are in the repo folder.
 1. Clone this repository
 ```shell
 git clone https://github.com/lopenguin/Fast-ShapeAndPose.git
