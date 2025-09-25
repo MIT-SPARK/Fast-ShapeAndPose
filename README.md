@@ -9,7 +9,7 @@ by Lorenzo Shaikewitz, Tim Nguyen, and Luca Carlone
 ![](assets/scf_oneiter.gif)|![](assets/scf_twomins.gif)
 
 
-This repository contains the *solver*. We open-source keypoint detection and training [here]().
+This repository contains the *solver*. We open-source keypoint detection and training [here](https://github.com/Piflyer/keypoint-tracking).
 
 ## Quick Start
 First, make sure you have [Julia installed](https://julialang.org/install/). This repository was tested with v1.11.6. Then, clone the repository and follow the directions below. We assume you are in the repo folder.
