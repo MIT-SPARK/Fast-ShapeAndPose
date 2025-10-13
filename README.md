@@ -35,6 +35,9 @@ julia> include("scripts/demo_pace.jl")
 
 The script may take a bit to run the first time while Julia precompiles it, but after that it should be much faster!
 
+## Using the solver in your own work
+The main bottleneck for using the solver is *keypoint detection*. To use the solver on your own application, you need to train a keypoint detector on your category and annotate its shape library. We provide some starting points [in this repo](https://github.com/Piflyer/keypoint-tracking).
+
 ## Reproducing Results
 First, download the data for each experiment:
 ```shell
