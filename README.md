@@ -15,7 +15,7 @@ This repository contains the *solver*. We open-source keypoint detection and tra
 First, make sure you have [Julia installed](https://julialang.org/install/). This repository was tested with v1.11.6. Then, clone the repository and follow the directions below. We assume you are in the repo folder.
 1. Clone this repository
 ```shell
-git clone https://github.com/lopenguin/Fast-ShapeAndPose.git
+git clone git@github.com:MIT-SPARK/Fast-ShapeAndPose.git
 cd Fast-ShapeAndPose
 ```
 2. Open the Julia REPL
