@@ -1,5 +1,23 @@
-# Category-Level Shape and Pose Estimation in Less Than a Millisecond
-[[Paper](https://arxiv.org/abs/2509.18979)] [[Video](TODO)]
+<h2 align="center">
+  <b>Category-Level Object Shape and Pose Estimation in Less Than a Millisecond</b>
+
+  <b><i>ICRA 2026</i></b>
+</h2>
+
+<p align="center">
+  <a href="https://arxiv.org/abs/2509.18979"><img src="https://img.shields.io/badge/Paper-arXiv-red?style=plastic&logo=adobeacrobatreader&logoColor=red" alt="Paper arXiv"></a>
+  <a href="https://youtu.be/KNWt8nH41LA?si=ttPXiuS1X8H8OCQq"><img src="https://img.shields.io/badge/Video-YouTube-blue?style=plastic&logo=youtube&logoColor=blue" alt="Video"></a>
+</p>
+
+<p align="center">
+    <a href="https://lorenzos.io/">Lorenzo Shaikewitz</a><sup>1</sup>,
+    <a href="https://www.thisistimnguyen.com/">Tim Nguyen</a><sup>2</sup>,
+    <a href="https://lucacarlone.mit.edu/">Luca Carlone</a><sup>1</sup>
+</p>
+
+<p align="center">
+    <sup>1</sup>Massachusetts Institute of Technology &nbsp;&nbsp; <sup>2</sup> Boston University
+</p>
 
 Official Julia implementation of "Category-Level Object Shape and Pose Estimation in Less Than a Millisecond"
 by Lorenzo Shaikewitz, Tim Nguyen, and Luca Carlone
