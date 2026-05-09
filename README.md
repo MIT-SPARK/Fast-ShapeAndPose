@@ -16,7 +16,7 @@
 </p>
 
 <p align="center">
-    <sup>1</sup>Massachusetts Institute of Technology &nbsp;&nbsp; <sup>2</sup> Boston University
+    <sup>1</sup>Massachusetts Institute of Technology &nbsp;&nbsp; <sup>2</sup>Boston University
 </p>
 
 Official Julia implementation of "Category-Level Object Shape and Pose Estimation in Less Than a Millisecond"
